@@ -231,7 +231,7 @@ To verify plugin is installable:
 
 **Method 1:** Clone from git
 ```bash
-git clone https://github.com/yourusername/workflow-plugin.git ~/.claude/plugins/workflow
+git clone https://github.com/illiahalushchynskyi/claude-workflow-plugin.git ~/.claude/plugins/workflow
 ```
 
 **Method 2:** Download release

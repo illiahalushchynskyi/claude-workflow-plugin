@@ -57,7 +57,7 @@ Best for: Developers, keeping up with updates
 mkdir -p ~/.claude/plugins
 
 # Clone the workflow plugin
-git clone https://github.com/yourusername/workflow-plugin.git ~/.claude/plugins/workflow
+git clone https://github.com/illiahalushchynskyi/claude-workflow-plugin.git ~/.claude/plugins/workflow
 
 # Verify (should show workflow skills)
 ls ~/.claude/plugins/workflow/skills/ | grep -E "^[a-z]+\.md$"
@@ -236,7 +236,7 @@ git push origin feature-branch
 # 2. Install workflow plugin (any of 3 methods above)
 # Method 1 recommended:
 mkdir -p ~/.claude/plugins
-git clone https://github.com/yourusername/workflow-plugin.git ~/.claude/plugins/workflow
+git clone https://github.com/illiahalushchynskyi/claude-workflow-plugin.git ~/.claude/plugins/workflow
 
 # 3. Clone your project
 git clone https://github.com/yourorg/your-project.git
