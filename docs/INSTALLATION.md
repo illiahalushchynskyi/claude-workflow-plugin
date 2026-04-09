@@ -60,16 +60,16 @@ mkdir -p ~/.claude/plugins
 git clone https://github.com/illiahalushchynskyi/claude-workflow-plugin.git ~/.claude/plugins/workflow
 
 # Verify (should show workflow skills)
-ls ~/.claude/plugins/workflow/skills/ | grep -E "^[a-z]+\.md$"
+ls -1 ~/.claude/plugins/workflow/skills/
 ```
 
 **Output should show:**
 ```
-bootstrap.md
-implementer.md
-verifier.md
-execute.md
-finalize.md
+bootstrap
+execute
+finalize
+implementer
+verifier
 ```
 
 **Updating in the future:**
@@ -95,7 +95,7 @@ unzip workflow-plugin-v1.0.0.zip -d ~/.claude/plugins
 mv ~/.claude/plugins/workflow-plugin-v1.0.0 ~/.claude/plugins/workflow
 
 # Verify
-ls ~/.claude/plugins/workflow/skills/ | grep -E "^[a-z]+\.md$"
+ls -1 ~/.claude/plugins/workflow/skills/
 ```
 
 ### Method 3: Add Plugin Path to Settings
@@ -128,18 +128,18 @@ ls ~/.claude/plugins/workflow/
 
 ### Quick Verification (30 seconds)
 
-Check that skill files are present:
+Check that skill directories are present:
 
 ```bash
-ls ~/.claude/plugins/workflow/skills/
+ls -1 ~/.claude/plugins/workflow/skills/
 ```
 
-Should show all 5 skill files:
-- `bootstrap.md`
-- `implementer.md`
-- `verifier.md`
-- `execute.md`
-- `finalize.md`
+Should show all 5 skill directories:
+- `bootstrap`
+- `implementer`
+- `verifier`
+- `execute`
+- `finalize`
 
 ### Detailed Verification (2 minutes)
 
@@ -163,18 +163,16 @@ Should show:
 - `schema/` (directory)
 - `examples/` (directory)
 
-Check all skill files present:
+Check all skill directories and files present:
 
 ```bash
-ls ~/.claude/plugins/workflow/skills/
+ls -1 ~/.claude/plugins/workflow/skills/
+for skill in bootstrap implementer verifier execute finalize; do
+  [ -f "~/.claude/plugins/workflow/skills/$skill/SKILL.md" ] && echo "$skill: ✓"
+done
 ```
 
-Should show 5 files:
-- `bootstrap.md`
-- `implementer.md`
-- `verifier.md`
-- `execute.md`
-- `finalize.md`
+Should show 5 directories, each with a SKILL.md file inside.
 
 **Test in Claude Code:** Try typing `/workflow:bootstrap` — if it loads, the plugin is working!
 

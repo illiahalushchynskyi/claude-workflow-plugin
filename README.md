@@ -46,10 +46,12 @@ mkdir -p ~/.claude/plugins
 git clone https://github.com/illiahalushchynskyi/claude-workflow-plugin.git ~/.claude/plugins/workflow
 
 # Verify installation
-claude-code --list-skills | grep workflow
+ls -1 ~/.claude/plugins/workflow/skills/
 ```
 
-You should see 5 skills: `workflow:bootstrap`, `workflow:implementer`, `workflow:verifier`, `workflow:execute`, `workflow:finalize`
+You should see 5 skill directories: `bootstrap`, `implementer`, `verifier`, `execute`, `finalize`
+
+In Claude Code, the skills are available as: `workflow:bootstrap`, `workflow:implementer`, `workflow:verifier`, `workflow:execute`, `workflow:finalize`
 
 ### Method 2: Download Released Plugin Package
 
@@ -201,11 +203,16 @@ workflow-plugin/
 ├── README.md                   # This file
 ├── package.json                # npm metadata (for lib utilities)
 ├── skills/
-│   ├── bootstrap.md           # Skill definitions with YAML frontmatter
-│   ├── implementer.md
-│   ├── verifier.md
-│   ├── execute.md
-│   └── finalize.md
+│   ├── bootstrap/
+│   │   └── SKILL.md           # Bootstrap skill definition with YAML frontmatter
+│   ├── implementer/
+│   │   └── SKILL.md
+│   ├── verifier/
+│   │   └── SKILL.md
+│   ├── execute/
+│   │   └── SKILL.md
+│   └── finalize/
+│       └── SKILL.md
 ├── lib/
 │   ├── fileValidation.ts      # Schema validation utilities
 │   └── utils.ts               # Helper functions
