@@ -1,0 +1,14 @@
+{
+  "name": "Workflow Local",
+  "owner": {
+    "name": "Local Development"
+  },
+  "plugins": [
+    {
+      "name": "workflow",
+      "source": "./",
+      "version": "1.0.0",
+      "description": "Workflow system for AI-driven development"
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow Configuration Schema",
+  "description": "JSON Schema for validating .workflow-config.json files",
+  "type": "object",
+  "required": [
+    "task_name",
+    "mode"
+  ],
+  "properties": {
+    "task_name": {
+      "type": "string",
+      "description": "Task identifier (must match PLAN.md task_name)",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "mode": {
+      "type": "integer",
+      "description": "Execution mode: 1 (step-by-step) or 2 (end-to-end)",
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "auto_advance": {
+      "type": "boolean",
+      "description": "Automatically advance to next step without human approval (Mode 2 only)",
+      "default": false
+    },
+    "verification_strategy": {
+      "type": "string",
+      "description": "Verification approach",
+      "enum": [
+        "minimal",
+        "standard",
+        "comprehensive",
+        "strict"
+      ],
+      "default": "comprehensive"
+    },
+    "notification_method": {
+      "type": "string",
+      "description": "How to notify on step completion",
+      "enum": [
+        "none",
+        "console",
+        "email",
+        "webhook"
+      ],
+      "default": "none"
+    },
+    "notification_target": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Email or webhook URL for notifications"
+    },
+    "branch_prefix": {
+      "type": "string",
+      "description": "Git branch prefix for workflow branches",
+      "default": "workflow-",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "commit_on_complete": {
+      "type": "boolean",
+      "description": "Automatically create final commit after workflow completion",
+      "default": true
+    },
+    "push_on_complete": {
+      "type": "boolean",
+      "description": "Push to remote after final commit",
+      "default": false
+    },
+    "step_approval_required": {
+      "type": "boolean",
+      "description": "Require human approval between steps (Mode 1 only)",
+      "default": true
+    },
+    "max_retries": {
+      "type": "integer",
+      "description": "Maximum verification retry attempts per step",
+      "minimum": 1,
+      "default": 3
+    },
+    "timeout_minutes": {
+      "type": "integer",
+      "description": "Timeout for waiting on agent responses (in minutes)",
+      "minimum": 5,
+      "maximum": 1440,
+      "default": 60
+    },
+    "require_tests": {
+      "type": "boolean",
+      "description": "Require test coverage for all modifications",
+      "default": true
+    },
+    "require_linting": {
+      "type": "boolean",
+      "description": "Require linting to pass",
+      "default": true
+    },
+    "require_documentation": {
+      "type": "boolean",
+      "description": "Require documentation for all changes",
+      "default": true
+    },
+    "slack_webhook": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Slack webhook URL for notifications"
+    },
+    "github_token": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "GitHub token for PR creation (if applicable)"
+    },
+    "custom_hooks": {
+      "type": "object",
+      "description": "Custom hooks for events",
+      "properties": {
+        "on_step_complete": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Script to run when step completes"
+        },
+        "on_workflow_complete": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Script to run when entire workflow completes"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

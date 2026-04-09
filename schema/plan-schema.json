@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow PLAN.md Schema",
+  "description": "JSON Schema for validating PLAN.md frontmatter in workflow tasks",
+  "type": "object",
+  "required": [
+    "task_name",
+    "title",
+    "mode",
+    "status",
+    "created"
+  ],
+  "properties": {
+    "task_name": {
+      "type": "string",
+      "description": "Unique identifier for the workflow task (alphanumerics, hyphens, underscores)",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title of the task",
+      "minLength": 5,
+      "maxLength": 256
+    },
+    "mode": {
+      "type": "integer",
+      "description": "Execution mode: 1 (step-by-step) or 2 (end-to-end)",
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "status": {
+      "type": "string",
+      "description": "Current workflow status",
+      "enum": [
+        "planning",
+        "executing",
+        "ready-for-review",
+        "approved",
+        "complete"
+      ]
+    },
+    "created": {
+      "type": "string",
+      "description": "ISO date when workflow was created",
+      "format": "date"
+    },
+    "started": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO date when workflow execution started",
+      "format": "date"
+    },
+    "completed": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO date when workflow was completed",
+      "format": "date"
+    },
+    "workflow_type": {
+      "type": "string",
+      "description": "Type of workflow for commit categorization",
+      "enum": [
+        "feature",
+        "bugfix",
+        "refactor",
+        "documentation",
+        "testing",
+        "other"
+      ]
+    },
+    "author": {
+      "type": "string",
+      "description": "Primary author/implementer of the workflow"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what this workflow accomplishes"
+    }
+  },
+  "additionalProperties": false
+}

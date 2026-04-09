@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow Step Metadata Schema",
+  "description": "JSON Schema for validating step-N.md frontmatter in workflow steps",
+  "type": "object",
+  "required": [
+    "step_number",
+    "name",
+    "status",
+    "created"
+  ],
+  "properties": {
+    "step_number": {
+      "type": "integer",
+      "description": "Step sequence number (1-based)",
+      "minimum": 1,
+      "maximum": 999
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the step",
+      "minLength": 5,
+      "maxLength": 256
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status of this step",
+      "enum": [
+        "pending",
+        "implementation",
+        "verification",
+        "complete",
+        "needs-fix"
+      ]
+    },
+    "iteration": {
+      "type": "integer",
+      "description": "Current iteration count (incremented on fixes)",
+      "minimum": 1,
+      "default": 1
+    },
+    "created": {
+      "type": "string",
+      "description": "ISO datetime when step was created",
+      "format": "date-time"
+    },
+    "started": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO datetime when step implementation began",
+      "format": "date-time"
+    },
+    "completed": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO datetime when step was verified complete",
+      "format": "date-time"
+    },
+    "estimated_effort": {
+      "type": "string",
+      "description": "Estimated effort level",
+      "enum": [
+        "xs",
+        "small",
+        "medium",
+        "large",
+        "xl"
+      ]
+    },
+    "blocked": {
+      "type": "boolean",
+      "description": "Is this step currently blocked?",
+      "default": false
+    },
+    "blocked_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Reason for blockage if blocked=true"
+    },
+    "tags": {
+      "type": "array",
+      "description": "Optional tags for categorization",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "depends_on": {
+      "type": "array",
+      "description": "Step numbers this step depends on",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}
