@@ -1,5 +1,5 @@
 ---
-name: execute
+name: workflow:execute
 description: Orchestrate workflow execution - manages mode selection and step sequencing between implementer and verifier agents
 ---
 

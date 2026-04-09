@@ -1,5 +1,5 @@
 ---
-name: finalize
+name: workflow:finalize
 description: Create final commit after workflow completion - summarizes all steps and marks workflow as complete
 ---
 

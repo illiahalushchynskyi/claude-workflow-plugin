@@ -15,23 +15,23 @@
   "skillsDir": "skills/",
   "skills": [
     {
-      "name": "bootstrap",
+      "name": "workflow:bootstrap",
       "description": "Initialize a new workflow task - creates PLAN.md and initial step files from task description"
     },
     {
-      "name": "implementer",
+      "name": "workflow:implementer",
       "description": "Execute implementation work for a workflow step - modifies code and updates step tracking files"
     },
     {
-      "name": "verifier",
+      "name": "workflow:verifier",
       "description": "Test a workflow step and mark complete - runs verification criteria and gates advancement"
     },
     {
-      "name": "execute",
+      "name": "workflow:execute",
       "description": "Orchestrate workflow execution - manages mode selection and step sequencing (Mode 1 or 2)"
     },
     {
-      "name": "finalize",
+      "name": "workflow:finalize",
       "description": "Create final commit after workflow completion - summarizes all steps and updates status to complete"
     }
   ],

@@ -1,5 +1,5 @@
 ---
-name: bootstrap
+name: workflow:bootstrap
 description: Initialize a new workflow task - creates PLAN.md and initial step files from task description and requirements
 ---
 

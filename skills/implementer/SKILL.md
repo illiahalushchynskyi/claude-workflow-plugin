@@ -1,5 +1,5 @@
 ---
-name: implementer
+name: workflow:implementer
 description: Execute implementation work for a workflow step - modifies code and updates step tracking files with detailed notes
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: verifier
+name: workflow:verifier
 description: Test a workflow step and mark complete - runs verification criteria and gates advancement to the next step
 ---
 
