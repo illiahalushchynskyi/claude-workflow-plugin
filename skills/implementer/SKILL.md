@@ -5,191 +5,194 @@ description: Use when a workflow step is in implementation phase - executes code
 
 # Workflow Implementer Skill
 
-Implement a workflow step. This skill runs in an isolated subagent dispatched by execute.
+Implement a workflow step. You are a subagent dispatched by execute.
 
-## When to Use
-
-Use this skill when:
-- You are a subagent dispatched by workflow:execute
-- Step status is `pending`, `implementation`, or `needs-fix`
-- execute provided full task context in the prompt
-
-## Input
-
-From execute's Agent() prompt:
-- Step file path
-- PLAN.md path
-- Task name and mode
-- Current iteration number
-- Issues (if needs-fix cycle)
-
-## Output
-
-- Code changes committed to project
-- step-N.md updated with:
-  - status = "verification"
-  - Implementation section filled
-  - Iteration incremented (if fix cycle)
-- Brief report returned to execute
+**This skill runs in isolated subagent context.** Execute passed you task directory and mode. YOU own the work.
 
 ---
 
-## YOUR PROCEDURE
+## YOUR FULL PROCEDURE (Execute in order)
 
 ### Step 1: Read & Understand
 
+Get task directory from execute's prompt (e.g., `.workflow/feature-auth/`)
+
 ```
-Read step file to understand:
-- Goal: what this step accomplishes
+Read: {TASK_DIR}/steps/step-{N}.md
+
+Extract:
+- Goal: what to accomplish
 - Verification Criteria: success conditions
-- Previous Implementation Notes: what was tried
-- Issues Identified: what needs fixing (if needs-fix)
+- Files to Modify/Create: what to change
+- Issues Identified: if this is needs-fix cycle
+
+Read: {TASK_DIR}/PLAN.md
+- Mode (1|2)
+- Current step number
 ```
 
-### Step 2: Implement Changes
+### Step 2: Implement Code Changes
 
 ```
 Make code changes:
-- Create new files if needed
-- Modify existing files
+- Use Edit tool for existing files
+- Use Write tool for new files
 - Follow project conventions
-- Use Edit/Write tools
+- Keep changes focused to this step
 
-If ORM models changed:
-  - Create migration files
-  - Run: npm run migrate (MANDATORY)
-  - Verify schema with: psql -c "\dt"
+If step modifies ORM models:
+  → Create migration files if needed
+  → Run MANDATORY: npm run migrate
+  → Verify schema: psql -c "\dt"
 ```
 
 ### Step 3: Test Locally
 
 ```
-Run tests: npm test
-- All tests MUST pass
-- If any fail: FIX them before continuing
-- Document test results
+MANDATORY: npm test
+
+If tests fail:
+  → Fix code or tests
+  → Re-run until all pass
+  → Document what was wrong
+
+Example passing:
+  45 tests passing
+  0 failures
+  Coverage: 92%
 ```
 
 ### Step 4: Commit Changes
 
 ```
 git commit -m "Implement step {N}: {Goal}"
-- Include files changed
-- Clear commit message
+
+Include in message:
+- What was implemented
+- Files changed
+- If migrations were run
 ```
 
 ### Step 5: Update Step File
 
-Edit step-N.md:
+Edit {TASK_DIR}/steps/step-{N}.md:
 
 ```yaml
 ---
 status: verification
-iteration: {SAME or INCREMENTED if fix cycle}
+iteration: {SAME or INCREMENTED}
 ---
 
 ## Implementation
 
 ### Files Modified/Created
-- File 1
-- File 2
+- file1.ts
+- file2.ts
+- migrations/001_add_users.sql
 
 ### Implementation Notes
+
 **Implementer**: Claude - {DATE}
-- {Decision made}
-- {Blocker if any}
-- {Test results}
-- {Notes for verifier}
+- Created [feature] using [approach]
+- Ran migrations: [yes/no]
+- Tests passing: [count/total]
+- [Any notes for verifier]
 ```
 
 ### Step 6: Report Back
 
-Return brief summary (under 100 words):
-- What you implemented
-- Files changed
-- Test results
-- Any concerns
+Return to execute with brief summary (under 100 words):
 
-Example:
 ```
-Implemented JWT token service:
-- Created TokenService with sign/verify methods
-- Added type definitions
-- 8 unit tests passing
-- All imports working
-- Runs migrations successfully
+✓ Step {N} complete
+- Implemented {goal}
+- Files: {count} created, {count} modified
+- Migrations: {yes/no}
+- Tests: {count} passing
+- Status: verification
 
-Status: verification
-Iteration: 1
+Ready for verification.
 ```
 
 ---
 
-## Decision Points
+## Decision Points During Work
 
 **Tests fail?**
-- Fix the test or code
-- Re-run until all pass
-- Document what was wrong
+- Fix the code or test
+- Re-run `npm test`
+- When all pass, continue
 
 **Migration fails?**
-- Fix the migration file
-- Run again
-- Verify schema applied
+- Check migration file syntax
+- Fix the migration
+- Run `npm run migrate` again
+- Verify with `psql -c "\dt"`
 
 **Build fails?**
 - Fix the error
-- Rebuild
-- Ensure success before moving on
+- `npm run build` again
+- No progress until success
 
 **Uncertain about approach?**
-- Report status: DONE_WITH_CONCERNS
-- List what you're uncertain about
+- Complete what you can
+- Document uncertainty in step file
+- Report: "Step complete but uncertain about [X]"
 - Let verifier review
 
-**Totally blocked?**
-- Report status: BLOCKED
-- Describe exact blocker
+**Blocked/Can't proceed?**
+- Document exact blocker
+- Report: "BLOCKED: [reason]"
 - Let execute handle escalation
+
+---
+
+## Files You Work With
+
+**Read:**
+- {TASK_DIR}/steps/step-{N}.md (task definition)
+- {TASK_DIR}/PLAN.md (context)
+- Project source files (whatever you need)
+
+**Write/Edit:**
+- Project source files
+- Migration files
+- {TASK_DIR}/steps/step-{N}.md (update Implementation section + status)
+
+**DO NOT modify:**
+- PLAN.md (except updater)
+- Other step files (only current step)
 
 ---
 
 ## Critical Requirements
 
-**MUST DO:**
-- ✅ Run migrations if ORM models changed
-- ✅ Run all tests - they must pass
-- ✅ Build project - it must compile
+**MUST:**
+- ✅ Understand goal before coding
+- ✅ Make all code changes
+- ✅ Run `npm test` - all must pass
+- ✅ If ORM models changed: run migrations
 - ✅ Commit changes with clear message
 - ✅ Update step file: status = "verification"
-- ✅ Fill Implementation section with details
+- ✅ Fill Implementation section
+- ✅ Return brief summary
 
-**NEVER DO:**
-- ❌ Skip migrations
-- ❌ Say tests pass if they don't
-- ❌ Commit broken code
+**NEVER:**
+- ❌ Skip tests
+- ❌ Skip migrations if needed
 - ❌ Leave step file unchanged
 - ❌ Report done if tests fail
+- ❌ Commit broken code
 
 ---
 
-## File Structure
-
-Files you'll need:
-- `.workflow/{TASK_NAME}/steps/step-{N}.md` - Update this
-- `.workflow/{TASK_NAME}/PLAN.md` - Reference only
-- Project files - Edit/Write as needed
-- Migration files - Create if needed
-
----
-
-## Success Criteria
+## Success = All This Done
 
 Step complete when:
 - ✅ Code changes made
-- ✅ All tests passing
+- ✅ Tests passing (100%)
 - ✅ Migrations ran (if needed)
 - ✅ Changes committed
-- ✅ step-N.md updated with status="verification"
+- ✅ step-N.md status = "verification"
 - ✅ Implementation section filled
-- ✅ Report provided to execute
+- ✅ Summary reported
