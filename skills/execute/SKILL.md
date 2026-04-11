@@ -5,9 +5,22 @@ description: Use when a workflow plan is ready and execution should begin - orch
 
 # Workflow Execute Skill
 
-Orchestrate workflow execution. Read plan, ask user, dispatch subagents via Skill invocation.
+Orchestrate workflow execution. Read plan, ask user, dispatch subagents.
 
-**CRITICAL:** This skill runs in MAIN SESSION. All work delegated to isolated subagents.
+**CRITICAL:** This skill runs in MAIN SESSION. All work delegated to **isolated subagents via Agent tool**.
+
+## Subagent Architecture
+
+```
+execute (main session)
+  ├─ Phase 1: Load State
+  ├─ Phase 2: Ask User
+  ├─ Phase 3: Main Loop
+  │   ├─ Phase 4: Agent(workflow:implementer) ← ISOLATED
+  │   ├─ Phase 5: Agent(workflow:verifier) ← ISOLATED
+  │   └─ Phase 6: Ask User (Mode 1 only)
+  └─ Phase 7: Agent(workflow:finalize) ← ISOLATED
+```
 
 ## When to Use
 
@@ -61,72 +74,108 @@ AskUserQuestion:
 
 ### Phase 4: Dispatch Implementer
 
-**CRITICAL:** Subagent will use Skill(workflow:implementer)
+**CRITICAL:** Use Agent tool to dispatch implementer as isolated subagent.
 
-```
+```python
 Agent(
-  description: "Implement step {N}",
+  description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
-  prompt: """
-You are implementer for {TASK_NAME}, step {N}: {STEP_NAME}
-Mode: {1|2}
-Task directory: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/
+  prompt: f"""
+You are implementing step {N} of {TASK_NAME}.
 
-PROCEDURE:
-1. Invoke Skill(workflow:implementer)
-2. Follow the skill exactly
-3. Report when done
+**INSTRUCTIONS:**
+1. Invoke: Skill(skill: "workflow:implementer")
+2. Follow the skill procedure exactly
+3. The skill will guide you through implementation
 
-The skill will guide you through:
-- Reading step requirements
-- Implementing code changes
-- Running migrations
-- Running tests
-- Updating step file
-- Returning summary
+**CONTEXT FROM EXECUTE:**
+- Task: {TASK_NAME}
+- Step: {N} ({STEP_NAME})
+- Task directory: {TASK_DIR_PATH}
+- Mode: {MODE} (1=step-by-step, 2=continuous)
+- Current working directory: {PROJECT_ROOT}
+
+**YOUR RESPONSIBILITY:**
+- Read step-{N}.md requirements
+- Implement all code changes
+- Run all tests (must pass)
+- Commit your work
+- Update step-{N}.md status to "verification"
+- Report summary when complete
+
+**DONE WHEN:**
+step-{N}.md shows status: verification
 """
 )
 ```
 
-After Agent returns:
-- Read step-N.md
-- Check new status
-- Loop back to Phase 3
+**After Agent returns:**
+```
+1. Read: .workflow/{TASK_NAME}/steps/step-{N}.md
+2. Check: frontmatter status field
+3. IF status == "verification": ✓ Continue to Phase 5
+4. IF status != "verification": ✗ FAIL (implementer did not complete)
+   → Ask user: "Implementer failed. Review and retry?"
+   → Option to request changes
+5. Loop back to Phase 3
+```
 
 ### Phase 5: Dispatch Verifier
 
-**CRITICAL:** Subagent will use Skill(workflow:verifier)
+**CRITICAL:** Use Agent tool to dispatch verifier as isolated subagent.
 
-```
+```python
 Agent(
-  description: "Verify step {N}",
+  description: f"Verify {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
-  prompt: """
-You are verifier for {TASK_NAME}, step {N}: {STEP_NAME}
-Mode: {1|2}
-Task directory: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/
+  prompt: f"""
+You are verifying step {N} of {TASK_NAME}.
 
-PROCEDURE:
-1. Invoke Skill(workflow:verifier)
-2. Follow the skill exactly
-3. Report when done
+**INSTRUCTIONS:**
+1. Invoke: Skill(skill: "workflow:verifier")
+2. Follow the skill procedure exactly
+3. The skill will guide you through verification
 
-The skill will guide you through:
-- Reading verification criteria
-- Setting up environment
-- Checking migrations
-- Running tests
-- Manual testing each criterion
-- Updating step file
-- Returning summary
+**CONTEXT FROM EXECUTE:**
+- Task: {TASK_NAME}
+- Step: {N} ({STEP_NAME})
+- Task directory: {TASK_DIR_PATH}
+- Mode: {MODE} (1=step-by-step, 2=continuous)
+- Current working directory: {PROJECT_ROOT}
+- Previous status: {PREV_STATUS}
+
+**YOUR RESPONSIBILITY:**
+- Read step-{N}.md verification criteria
+- Set up environment (install deps, build, etc)
+- Run all tests (must pass)
+- Manually verify each criterion in checklist
+- Update step-{N}.md status to "complete" or "needs-fix"
+- Document any issues found
+- Report detailed findings
+
+**DONE WHEN:**
+step-{N}.md shows status: complete OR needs-fix
+**AND** implementation notes section updated with verification results
+
+**IF needs-fix:**
+- Document exact issues in step file
+- Implementer will see and re-work
 """
 )
 ```
 
-After Agent returns:
-- Read step-N.md
-- Check new status (complete or needs-fix)
-- Loop back to Phase 3
+**After Agent returns:**
+```
+1. Read: .workflow/{TASK_NAME}/steps/step-{N}.md
+2. Check: frontmatter status field
+3. IF status == "complete":
+   → Phase 6 (Mode 1) OR Phase 3 next step (Mode 2)
+4. IF status == "needs-fix":
+   → Loop back to Phase 3 (implementer re-works this step)
+5. IF status != "complete" AND != "needs-fix":
+   → ✗ FAIL (verifier did not complete)
+   → Ask user for guidance
+```
 
 ### Phase 6: Step Complete - Ask Approval (Mode 1 only)
 
@@ -151,43 +200,54 @@ AskUserQuestion:
 When no more non-complete steps:
 
 ```
-Edit: .workflow/{TASK_NAME}/PLAN.md
-Set: status = "ready-for-review"
+1. Edit: .workflow/{TASK_NAME}/PLAN.md
+   Set: status = "ready-for-review"
 
-AskUserQuestion:
-  questions:
-    - question: "All steps verified. Finalize?"
-      options:
-        - label: "Yes, finalize"
-        - label: "No, review more"
+2. AskUserQuestion:
+   - question: "All steps verified. Finalize workflow?"
+   - options:
+     - label: "Yes, finalize and commit"
+       description: "Create final commit and mark complete"
+     - label: "No, review more"
+       description: "Review changes or re-run verification"
 ```
 
-**IF Yes:**
-```
+**IF "Yes, finalize":**
+```python
 Agent(
-  description: "Finalize workflow",
+  description: f"Finalize {TASK_NAME} workflow",
   subagent_type: "general-purpose",
-  prompt: """
-You are finalizer for {TASK_NAME}
-Task directory: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/
+  prompt: f"""
+You are finalizing {TASK_NAME}.
 
-PROCEDURE:
-1. Invoke Skill(workflow:finalize)
-2. Follow the skill exactly
-3. Report when done
+**INSTRUCTIONS:**
+1. Invoke: Skill(skill: "workflow:finalize")
+2. Follow the skill procedure exactly
+3. The skill will guide you through finalization
 
-The skill will:
-- Verify all steps complete
-- Create final commit
-- Update PLAN.md
+**CONTEXT FROM EXECUTE:**
+- Task: {TASK_NAME}
+- Task directory: {TASK_DIR_PATH}
+- Current working directory: {PROJECT_ROOT}
+
+**YOUR RESPONSIBILITY:**
+- Verify all steps show status: complete
+- Create comprehensive final commit
+- Update PLAN.md status to "complete"
+- Generate summary of all changes
 - Report completion
+
+**DONE WHEN:**
+PLAN.md shows status: complete
+AND final commit exists in git log
 """
 )
 ```
 
-Done!
+Then: **WORKFLOW COMPLETE** ✓
 
-**IF No:** Loop back to Phase 3 (allow more changes)
+**IF "No, review more":**
+- Loop back to Phase 3 (allow re-work of any step)
 
 ---
 
@@ -195,32 +255,82 @@ Done!
 
 **MUST DO:**
 - ✅ Read PLAN.md and step files first
-- ✅ Ask user via AskUserQuestion BEFORE any Agent()
-- ✅ Use Agent(subagent_type="general-purpose")
-- ✅ Pass minimal context to Agent
-- ✅ Instruct Agent to use Skill()
-- ✅ Wait for Agent() to return
+- ✅ Ask user via AskUserQuestion BEFORE first Agent()
+- ✅ Use Agent(subagent_type="general-purpose") for implementer/verifier/finalize
+- ✅ Pass context and task directory to Agent prompt
+- ✅ Instruct Agent to Invoke Skill() for their task
+- ✅ Wait for Agent() to return completely
+- ✅ Read step-N.md to verify status changed
+- ✅ Handle failures and ask user
 
 **NEVER DO:**
-- ❌ Skip AskUserQuestion
-- ❌ Put full procedure in Agent prompt
-- ❌ Tell subagent to do work directly
-- ❌ Read source files (only workflow files)
-- ❌ Run tests yourself
-- ❌ Write code yourself
+- ❌ Skip initial AskUserQuestion
+- ❌ Write code or make changes yourself
+- ❌ Run tests or migrations yourself
+- ❌ Read/edit source files (only workflow files)
+- ❌ Modify step files directly (agents do this)
+- ❌ Assume Agent succeeded without reading files
+- ❌ Dispatch multiple agents in parallel (go sequentially)
+
+---
+
+## Mode 2 Special Rules (Continuous with Verification Gates)
+
+If PLAN.mode == 2:
+
+```
+Between steps:
+- NO human approval pause
+- Verifier gates advancement (must complete before next step)
+- Implementer can start step N+1 as soon as step N verifies complete
+
+Check before dispatching implementer for step N:
+- IF N > 1: MUST check step N-1 status == "complete"
+- IF step N-1 != "complete": WAIT (verifier still working on N-1)
+- Only dispatch implementer for N when N-1 is done
+```
+
+---
+
+## Error Handling
+
+**If Agent times out or fails:**
+```
+1. Check Agent result output
+2. If partial completion: ask user "Proceed or abort?"
+3. If clear failure: document and ask user "Retry or abandon?"
+4. Update PLAN.md notes with error
+5. Proceed based on user decision
+```
+
+**If step file status didn't change:**
+```
+1. Read step-{N}.md frontmatter again
+2. If still old status: Agent didn't complete
+3. Ask user: "Subagent didn't finish. Retry?"
+4. Can retry same Agent or abort
+```
 
 ---
 
 ## Subagent Responsibility
 
-When you dispatch Agent with "Use Skill(workflow:implementer)":
-- Subagent OWNS the work
-- Subagent reads Skill
-- Subagent follows Skill procedure
-- Subagent updates files
-- Subagent reports back to you
+When you dispatch Agent(workflow:implementer):
+- Subagent OWNS the implementation
+- Subagent reads Skill(workflow:implementer)
+- Subagent modifies code and tests
+- Subagent updates step-{N}.md status
+- Subagent reports summary
 
-You simply:
-- Read results
-- Update PLAN.md status table
-- Loop to next action
+When you dispatch Agent(workflow:verifier):
+- Subagent OWNS the verification
+- Subagent reads Skill(workflow:verifier)
+- Subagent runs tests and checks criteria
+- Subagent updates step-{N}.md status
+- Subagent documents findings
+
+**You (execute) simply:**
+- Read results (PLAN.md, step-N.md)
+- Verify status changed as expected
+- Loop to next action or ask user
+- Never second-guess subagent work (they own it)
