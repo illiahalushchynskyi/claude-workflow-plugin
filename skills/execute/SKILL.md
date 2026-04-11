@@ -57,17 +57,49 @@ Subagents do NOT ask users for permission during execution. They work independen
 2. **`.workflow/TASK_NAME/steps/step-N.md`** — per-step status and notes
 3. **`.workflow/TASK_NAME/.workflow-config.json`** — optional settings
 
-## Execution Loop
+## ⚡ EXECUTE THIS NOW (Not Documentation)
 
-At each tick the orchestrator:
+**YOU ARE THE ORCHESTRATOR. Follow this execution loop exactly:**
 
-1. Reads `PLAN.md` → determines mode and overall status
-2. Finds the first step whose status is not `complete`
-3. Dispatches the appropriate subagent for that step's current status
-4. Reads the updated `step-N.md` when the subagent returns
-5. Updates `PLAN.md` step table to reflect new status
-6. In Mode 1: pauses for human approval after a step reaches `complete`
-7. Repeats until all steps are `complete`, then marks PLAN `ready-for-review` and asks for final approval
+### Execution Loop
+
+At each tick YOU (the orchestrator in main session) must:
+
+1. **Read PLAN.md** → determine mode and overall status
+2. **Find first non-complete step** → check step-N.md frontmatter `status`
+3. **Check status → dispatch subagent via Agent() tool:**
+   - If status = `pending`, `implementation`, or `needs-fix` → **Call Agent() for implementer** (see below)
+   - If status = `verification` → **Call Agent() for verifier** (see below)
+   - If status = `complete` → Ask user for approval (Mode 1) or continue to next step (Mode 2)
+4. **Wait for Agent() to return** (foreground call)
+5. **Read updated step-N.md** → check new status
+6. **Update PLAN.md step table** to reflect new status
+7. **Repeat loop** until all steps `complete`
+
+### When You (Orchestrator) Must Act
+
+**DO THIS NOW:**
+```
+Loop:
+  Read PLAN.md status
+  Find first step where status ≠ complete
+  
+  if step.status in {pending, implementation, needs-fix}:
+    → CALL Agent(implementer subagent) - see "Dispatching Implementer" below
+    → Wait for result
+    → Read step-N.md again
+    → Loop
+  
+  if step.status == verification:
+    → CALL Agent(verifier subagent) - see "Dispatching Verifier" below
+    → Wait for result
+    → Read step-N.md again
+    → Loop
+  
+  if step.status == complete:
+    → Ask user: "Step N complete. Approve?" (Mode 1 only)
+    → Loop to next step
+```
 
 ### Status → action map
 
@@ -79,151 +111,180 @@ At each tick the orchestrator:
 | `verification`  | Dispatch **verifier** subagent                                |
 | `complete`      | Mode 1: pause for human approval; Mode 2: advance to next step|
 
-## Dispatching the Implementer (Agent tool)
+## ⚡ DISPATCHING THE IMPLEMENTER (DO THIS NOW)
 
-When a step needs implementation work, call `Agent` with `subagent_type: "general-purpose"` and a **self-contained** prompt. **The subagent will have its own isolated context — it will NOT appear in your active session.** This isolation is intentional and required by the architecture.
+**When step.status is `pending`, `implementation`, or `needs-fix`:**
 
-The subagent has its own fresh context and sees none of your conversation.
+### CALL THIS IMMEDIATELY:
 
-Required prompt contents:
-
-- Role statement: "You are the workflow implementer subagent"
-- Absolute path to the step file
-- Absolute path to `PLAN.md` (for cross-step context)
-- Task name and current mode (1 or 2)
-- Instruction to invoke `Skill("workflow:implementer")` for the full procedure and follow it
-- **If this is a `needs-fix` cycle (status was `needs-fix`):**
-  - Copy the "Issues Identified" section from step-N.md Verification section
-  - Include exact instructions like: "The verifier reported these issues — fix each one: [PASTE ISSUES]"
-  - Include iteration number if applicable
-- Instruction to update the step file status to `verification` on success and return a **brief** report (≤150 words) — no code dumps, no full diffs
-
-Template:
-
-```
-You are the workflow implementer subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
+```python
+Agent(
+  description: "Workflow implementer for task {TASK_NAME}, step {N}",
+  subagent_type: "general-purpose",
+  prompt: """You are the workflow implementer subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
 Mode: {1|2}.
 
+CRITICAL: You are in an ISOLATED subagent context. You have full permissions for:
+- Reading/writing project files
+- Running builds, tests, git commands
+- Making implementation decisions
+- Updating workflow step files
+
+Do NOT ask the user for permission on anything.
+
+PROCEDURE:
 1. Invoke Skill("workflow:implementer") and follow its procedure exactly.
 2. Read the step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
 3. Read PLAN.md for context: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/PLAN.md
-4. Perform the implementation described in the step file. Make the code changes, run local checks.
-5. Update the step file: frontmatter status → "verification", fill in the Implementation section with notes.
-6. {if needs-fix: "The previous verifier reported these issues — address each one: <paste issues>"}
-7. Return a brief report (under 150 words): what you changed, any blockers, and which files were touched.
+4. Perform the implementation. Make code changes, run local checks.
+5. Update step-N.md: frontmatter status → "verification", fill Implementation section.
+{IF NEEDS-FIX: "6. The previous verifier reported these issues — fix each one:\n{ISSUES_FROM_FILE}"}
+6. Return a brief report (under 150 words): what changed, blockers, files touched.
    Do NOT paste file contents or full diffs.
+
+AFTER COMPLETION:
+- Step file status MUST be "verification"
+- Report progress back to orchestrator"""
+)
 ```
 
-Run the Agent call in the **foreground** (synchronous, wait for result) — the orchestrator needs the return signal before it can read the updated step file.
+### Step-by-Step for This Agent() Call:
 
-**CRITICAL:** "Foreground" means the Agent() call waits for the subagent to finish, NOT that the subagent runs in your active session. The subagent runs in its own completely isolated context. You will see the Agent tool result (subagent's brief report), but NOT the file reads, code changes, or test output — that stays in the subagent's isolated context.
+1. **Read the step file first** (you, in main session) to get exact paths and details
+2. **Build the prompt** above with:
+   - `{TASK_NAME}` = name from PLAN.md frontmatter
+   - `{STEP_NAME}` = step name from step-N.md
+   - `{ABSOLUTE_PATH}` = `/home/illia/work/claude-workflow-plugin` (or actual path)
+   - `{N}` = step number
+   - `{1|2}` = mode from PLAN.md
+   - If status = `needs-fix`: `{ISSUES_FROM_FILE}` = copy "Issues Identified" section from step-N.md
+3. **Call Agent()** with the prompt above
+4. **WAIT for result** (foreground, synchronous)
+5. **Check returned report** — should indicate success and status change to "verification"
+6. **Read step-N.md again** to confirm status changed
 
-## Dispatching the Verifier (Agent tool)
+### What Happens in Subagent (NOT in your session)
+- Implementer runs in completely isolated context
+- File reads, code writes, test output — all invisible to you
+- You only see the brief summary returned
+- This keeps your conversation clean
 
-**CRITICAL: Verifier MUST run as an isolated subagent, not in the orchestrator's active session.**
+## ⚡ DISPATCHING THE VERIFIER (DO THIS NOW)
 
-When a step reaches `verification` status, dispatch as a fresh subagent using `subagent_type: "general-purpose"`.
+**When step.status is `verification`:**
 
-Template:
+### CALL THIS IMMEDIATELY:
 
-```
-You are the workflow verifier subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
+```python
+Agent(
+  description: "Workflow verifier for task {TASK_NAME}, step {N}",
+  subagent_type: "general-purpose",
+  prompt: """You are the workflow verifier subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
 Mode: {1|2}.
 
-**CRITICAL EXECUTION RULE:** You are in a completely isolated subagent context. Do NOT rely on orchestrator state. You must independently:
-1. Read all necessary files (step file, source code, test files, etc.)
-2. Run ALL verification steps: build, tests, manual testing
-3. Actually execute code to verify it works (not just code review)
+CRITICAL: You are in an ISOLATED subagent context. You have full permissions for:
+- Reading all project files
+- Running builds, tests, Docker commands
+- Making verification decisions
+- Updating workflow step files
 
-Procedure:
+Do NOT ask the user for permission on anything.
+
+EXECUTION RULE: You MUST execute code and tests. Do not just review code.
+
+PROCEDURE:
 1. Invoke Skill("workflow:verifier") and follow its procedure exactly.
 2. Read the step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
-3. Read project files and understand what implementer created
-4. **Execute verification (not just review):**
-   - Build/compile the project
-   - Run all relevant test suites
-   - Manually test against verification criteria by executing the code
-   - Verify everything actually works (not just "looks correct")
-5. On PASS: update frontmatter status → "complete", fill in the Verification section with full PASS notes.
-6. On FAIL: update frontmatter status → "needs-fix", bump iteration, list specific issues with file/line refs and proof (test output, error messages).
-7. Return a brief report (under 150 words): PASS or FAIL, and the key evidence. Include test output summaries.
+3. Read project files and understand what was implemented
+4. EXECUTE verification (mandatory steps):
+   - Set up test environment (Docker, databases, services)
+   - Build/compile the project (if build fails → FAIL)
+   - Run ALL test suites (if any test fails → FAIL)
+   - Manually test each verification criterion by RUNNING the code
+   - Prove everything works with concrete evidence (test output, curl responses, etc.)
+5. On PASS: 
+   - Update frontmatter status → "complete"
+   - Fill Verification section with PASS notes and proof
+6. On FAIL:
+   - Update frontmatter status → "needs-fix"
+   - Increment iteration number
+   - Document "Issues Identified" section with exact errors and file locations
+7. Return a brief report (under 150 words): PASS or FAIL with evidence.
+
+AFTER COMPLETION:
+- Step file status MUST be "complete" or "needs-fix"
+- Report progress back to orchestrator"""
+)
 ```
 
-**KEY POINTS:**
-- Both use `subagent_type: "general-purpose"`
-- Both run in **completely isolated subagent contexts** (not in orchestrator's active session)
-- Verifier's isolation is critical: it independently builds, tests, and verifies without relying on implementer's claims
-- You receive only the brief report; test output and code reads stay in subagent context
+### Step-by-Step for This Agent() Call:
 
-**Why isolation matters:**
-- If verifier ran in your active session, you'd see 50 lines of build output, test output, and code reads
-- Isolation keeps your conversation clean while verifier does the heavy lifting
-- Implementer and verifier never interfere with each other's work
+1. **Read the step file first** (you, in main session) to get paths and iteration count
+2. **Build the prompt** above with:
+   - `{TASK_NAME}` = name from PLAN.md
+   - `{STEP_NAME}` = step name from step-N.md
+   - `{ABSOLUTE_PATH}` = `/home/illia/work/claude-workflow-plugin`
+   - `{N}` = step number
+   - `{1|2}` = mode from PLAN.md
+3. **Call Agent()** with the prompt above
+4. **WAIT for result** (foreground, synchronous)
+5. **Check returned report** — PASS or FAIL with evidence
+6. **Read step-N.md again** to confirm status changed to `complete` or `needs-fix`
+7. **If FAIL:** Extract "Issues Identified" for next implementer cycle
 
-## Reading Back Subagent Results
+### Critical Differences from Main Session
 
-After an `Agent` call returns:
+- **Verifier runs in isolated subagent context** (invisible to you)
+- Build output, test runs, manual testing — all invisible
+- You only see brief summary + step file updates
+- This keeps your conversation clean while verifier works independently
 
-1. `Read` the step file (only the file — not the source it modified)
-2. Check the frontmatter `status` field
-3. Update the `PLAN.md` step table entry
-4. Decide the next action from the status → action map
+## After Agent() Returns (You Still in Main Session)
 
-**Do not** open any of the source files the subagent touched. If you need to know what changed, the subagent's returned report is the source of truth; if that report is insufficient, dispatch another subagent to summarize — don't read files yourself.
+1. **Read the step file** (only this file, NOT the source code it touched)
+   ```bash
+   cat .workflow/TASK_NAME/steps/step-N.md
+   ```
+2. **Check the frontmatter** — what is new `status`?
+   - `verification` = implementer just finished
+   - `complete` = verifier says it passes
+   - `needs-fix` = verifier found issues
+3. **Update PLAN.md step table** with new status
+   ```bash
+   # Edit PLAN.md: find the step row, change status column
+   # Example: | Step 1 | Create API | verification | → | Step 1 | Create API | complete |
+   ```
+4. **Decide next action** from status:
+   - If `verification`: loop back, call Agent() for verifier
+   - If `needs-fix`: loop back, call Agent() for implementer (with issues)
+   - If `complete`: ask user (Mode 1) or continue to next step (Mode 2)
 
-## Mode 1: Step-by-Step with Human Approval
+**IMPORTANT: Do NOT read source files the subagent touched.** 
+- Subagent's returned report is the truth
+- You only need to check step-N.md and PLAN.md
+- Keep your context clean
 
-**Fix-Verify Loop Cycle (CRITICAL):**
+## Mode-Specific Behavior
 
-```
-Loop:
-  step = first non-complete step
-  if none: break
+### Mode 1: Step-by-Step with Human Approval
 
-  if step.status in {pending, implementation}:
-    Agent(implementer prompt for step)
-    read step file → update PLAN table
+After each step reaches `complete`:
+- Ask user: "Step {N} complete. Approve and continue to step {N+1}?"
+- If approve: continue loop to next step
+- If "request changes": set step status back to `needs-fix`, continue loop
 
-  if step.status == needs-fix:
-    READ "Issues Identified" section from step-N.md
-    Agent(implementer prompt for step, with issues from step file)
-    read step file → update PLAN table
+At end (all steps `complete`):
+- Set PLAN.status = `ready-for-review`
+- Ask user final approval
+- If approve: **Call Skill("workflow:finalize")** to complete workflow
 
-  if step.status == verification:
-    Agent(verifier prompt for step)
-    read step file → update PLAN table
-    if step.status changed to needs-fix:
-      continue loop (implementer runs again with new issues)
+### Mode 2: End-to-End with Verification Gates
 
-  if step.status == complete:
-    AskUserQuestion: "Step {N} complete. Approve and continue?"
-      approve → continue loop (move to next step)
-      request changes → set step.status = needs-fix, continue loop
-
-After all complete:
-  PLAN.status = ready-for-review
-  AskUserQuestion: final approval
-    approve → Skill("workflow:finalize")
-    request changes → identify step, set needs-fix, continue loop
-```
-
-**Key Fix-Verify Cycle Behavior:**
-
-1. **Implementer creates code** → status = `verification`
-2. **Verifier tests code** →
-   - If PASS: status = `complete`
-   - If FAIL: status = `needs-fix` + "Issues Identified" section
-3. **Orchestrator reads step file, sees `needs-fix`** →
-   - Reads "Issues Identified" from step-N.md
-   - Extracts issues list
-   - Dispatches implementer AGAIN with issues in prompt
-4. **Implementer fixes** → status = `verification` again
-5. **Loop continues** until verifier says PASS
-6. **Only when status = `complete` can step advance to next**
-
-## Mode 2: End-to-End with Verification Gates
-
-Same loop, but **no human pause** between steps — only verifier PASS gates advancement, and the human is asked only once at the end when PLAN reaches `ready-for-review`.
+**Same loop, but:**
+- NO human pause between steps
+- Verifier PASS (status = `complete`) is the only gate
+- Only ask human once at the very end when PLAN.status = `ready-for-review`
+- If all steps pass: can finalize immediately after final approval
 
 ## State Transitions
 
