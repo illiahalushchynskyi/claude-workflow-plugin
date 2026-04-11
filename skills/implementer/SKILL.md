@@ -9,13 +9,14 @@ description: Execute implementation work for a workflow step - modifies code and
 
 The `implementer` skill executes the implementation work for a specific workflow step. It reads the step definition from `step-N.md`, performs the required code changes, and updates the step file with detailed implementation notes and progress tracking.
 
+**This skill is designed to run inside a subagent dispatched by `workflow:execute` via the `Agent` tool.** The orchestrator invokes an `Agent` call whose prompt tells the subagent to load this skill. The subagent has its own isolated context — that is the whole point, and it is what keeps the orchestrator's context clean. Do NOT invoke this skill directly in the main orchestrator conversation; if you do, all the file reads and edits will land in the main context instead of a subagent's.
+
 ## When to Use
 
 Use `implementer` when:
-- A workflow step is in "pending" or "needs-fix" status
-- You have a clear step definition with goals and verification criteria
-- You're ready to modify code and implement changes
-- Orchestrator signals it's time for implementer to work
+- You are a subagent dispatched by the orchestrator with an instruction to load `workflow:implementer`
+- A workflow step is in `pending`, `implementation`, or `needs-fix` status
+- The orchestrator's prompt has given you the absolute path to the step file
 
 ## Input
 
@@ -76,10 +77,14 @@ Update `step-N.md` implementation section with:
 
 ### Step 4: Prepare for Verification
 
-- Update step status to `verification`
-- Update iteration count if fixing previous issues
+- Update step file frontmatter `status` to `verification`
+- Update `iteration` count if fixing previous issues
 - Mark timestamp
 - Leave clear notes for verifier about what to test
+
+### Step 5: Return a Brief Report
+
+Return a short summary (under ~150 words) to the orchestrator: what you changed, files touched, any blockers, and anything the verifier should focus on. **Do not** paste file contents, full diffs, or long test output — the orchestrator does not need them and they would defeat the purpose of running in an isolated subagent.
 
 ## Output
 

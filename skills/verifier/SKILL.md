@@ -18,13 +18,14 @@ The `verifier` skill tests and validates a completed workflow step. It reads the
 - On PASS: marks `complete`, unblocks next step
 - On FAIL: marks `needs-fix`, returns to implementer
 
+**This skill is designed to run inside a subagent dispatched by `workflow:execute` via the `Agent` tool.** The orchestrator invokes an `Agent` call whose prompt tells the subagent to load this skill. The subagent has its own isolated context, which keeps test output and code reads out of the orchestrator's conversation. Do NOT invoke this skill directly in the main orchestrator conversation.
+
 ## When to Use
 
 Use `verifier` when:
+- You are a subagent dispatched by the orchestrator with an instruction to load `workflow:verifier`
 - A step has status `verification` in its step-N.md file
-- Implementer has finished code changes and documentation
-- Implementation is ready for testing against criteria
-- Orchestrator signals verifier to work
+- The orchestrator's prompt has given you the absolute path to the step file
 
 ## Input
 
@@ -290,6 +291,10 @@ When reporting FAIL, be specific:
 - "Type issues"
 
 **Implementer uses specific issues to know exactly what to fix.**
+
+## Returning to the Orchestrator
+
+After updating the step file, return a brief report (under ~150 words) to the orchestrator stating PASS or FAIL and the key evidence. Do NOT paste full test output, full diffs, or file contents — the orchestrator does not need them and relies on the step file for details.
 
 ## Related Skills
 
