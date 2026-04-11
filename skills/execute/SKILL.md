@@ -61,20 +61,42 @@ Subagents do NOT ask users for permission during execution. They work independen
 
 **YOU ARE THE ORCHESTRATOR. Follow this execution loop exactly:**
 
+### Step 1: Check Current Status
+
+**ALWAYS START HERE** when executing:
+
+1. **Read PLAN.md** → check current status (planning/executing/ready-for-review)
+2. **Read all step files** → find first non-complete step and note its current status
+3. **Report to user:**
+   ```
+   Workflow Status:
+   - PLAN status: {executing}
+   - Current step: Step 3 (Add API endpoints)
+   - Step status: {needs-fix}
+   - Last action: Verifier found issues with error handling
+   
+   I'm about to:
+   1. Read Issues Identified from step-3.md
+   2. Dispatch implementer subagent to fix issues
+   3. Run verifier again
+   
+   Ready to proceed? (yes/no)
+   ```
+4. **Wait for user confirmation** before dispatching any subagent
+
 ### Execution Loop
 
 At each tick YOU (the orchestrator in main session) must:
 
-1. **Read PLAN.md** → determine mode and overall status
-2. **Find first non-complete step** → check step-N.md frontmatter `status`
-3. **Check status → dispatch subagent via Agent() tool:**
+1. **Find first non-complete step** → check step-N.md frontmatter `status`
+2. **Check status → dispatch subagent via Agent() tool:**
    - If status = `pending`, `implementation`, or `needs-fix` → **Call Agent() for implementer** (see below)
    - If status = `verification` → **Call Agent() for verifier** (see below)
    - If status = `complete` → Ask user for approval (Mode 1) or continue to next step (Mode 2)
-4. **Wait for Agent() to return** (foreground call)
-5. **Read updated step-N.md** → check new status
-6. **Update PLAN.md step table** to reflect new status
-7. **Repeat loop** until all steps `complete`
+3. **Wait for Agent() to return** (foreground call)
+4. **Read updated step-N.md** → check new status
+5. **Update PLAN.md step table** to reflect new status
+6. **Repeat loop** until all steps `complete`
 
 ### When You (Orchestrator) Must Act
 
@@ -115,7 +137,7 @@ Loop:
 
 **When step.status is `pending`, `implementation`, or `needs-fix`:**
 
-### CALL THIS IMMEDIATELY:
+### CALL THIS IMMEDIATELY (Do NOT invoke Skill() in the prompt):
 
 ```python
 Agent(
@@ -124,27 +146,61 @@ Agent(
   prompt: """You are the workflow implementer subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
 Mode: {1|2}.
 
-CRITICAL: You are in an ISOLATED subagent context. You have full permissions for:
-- Reading/writing project files
-- Running builds, tests, git commands
-- Making implementation decisions
-- Updating workflow step files
+CRITICAL: You are in an ISOLATED subagent context with full permissions:
+- Read/write any project files
+- Run builds, tests, migrations, git commands
+- Update workflow step files
+- Make implementation decisions independently
 
-Do NOT ask the user for permission on anything.
+Do NOT ask user for permission. Work independently.
 
-PROCEDURE:
-1. Invoke Skill("workflow:implementer") and follow its procedure exactly.
-2. Read the step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
-3. Read PLAN.md for context: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/PLAN.md
-4. Perform the implementation. Make code changes, run local checks.
-5. Update step-N.md: frontmatter status → "verification", fill Implementation section.
-{IF NEEDS-FIX: "6. The previous verifier reported these issues — fix each one:\n{ISSUES_FROM_FILE}"}
-6. Return a brief report (under 150 words): what changed, blockers, files touched.
-   Do NOT paste file contents or full diffs.
+## Your Task
 
-AFTER COMPLETION:
-- Step file status MUST be "verification"
-- Report progress back to orchestrator"""
+Implement step {N} ({STEP_NAME}) as described:
+
+### Step 1: Read & Understand
+- Read step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
+- Read PLAN.md for context: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/PLAN.md
+- Understand the goal and verification criteria
+{IF NEEDS-FIX: "- Read 'Issues Identified' section — these are the issues to fix"}
+
+### Step 2: Implement
+- Make code changes following project patterns
+- Create migration files if ORM models changed
+- **Run migrations immediately** if schema changed: `npm run migrate`
+- Commit changes with clear messages
+- Run local tests: `npm test`
+
+### Step 3: Verify Locally
+- Ensure project builds: `npm run build`
+- All tests passing: `npm test`
+- Code follows project conventions
+- No console errors or warnings
+
+### Step 4: Update Step File
+Edit {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md:
+- Set frontmatter `status: verification`
+- Set `iteration: {ITERATION}` (increment if fix cycle)
+- Fill Implementation section with:
+  - Files created/modified (with specific changes)
+  - Key decisions made
+  - Any blockers encountered
+  - Test results (pass/fail counts)
+  - Notes for verifier
+
+### Step 5: Report Back
+Return brief summary (under 150 words):
+- What you implemented
+- Any blockers or concerns
+- Test results
+- Files touched
+Do NOT paste file contents or diffs.
+
+## If You Get Stuck
+- Clear blocker? Report status: BLOCKED, describe issue
+- Need more context? Report status: NEEDS_CONTEXT
+- Completed but uncertain? Report status: DONE_WITH_CONCERNS
+- All good? Complete normally with status DONE"""
 )
 ```
 
@@ -173,7 +229,7 @@ AFTER COMPLETION:
 
 **When step.status is `verification`:**
 
-### CALL THIS IMMEDIATELY:
+### CALL THIS IMMEDIATELY (Do NOT invoke Skill() in the prompt):
 
 ```python
 Agent(
@@ -182,38 +238,106 @@ Agent(
   prompt: """You are the workflow verifier subagent for task {TASK_NAME}, step {N} ({STEP_NAME}).
 Mode: {1|2}.
 
-CRITICAL: You are in an ISOLATED subagent context. You have full permissions for:
-- Reading all project files
-- Running builds, tests, Docker commands
-- Making verification decisions
-- Updating workflow step files
+CRITICAL: You are in an ISOLATED subagent context with full permissions:
+- Read any project files
+- Run builds, tests, Docker, git commands
+- Update workflow step files
+- Make verification decisions independently
 
-Do NOT ask the user for permission on anything.
+Do NOT ask user for permission. Test independently.
 
-EXECUTION RULE: You MUST execute code and tests. Do not just review code.
+## Your Task
 
-PROCEDURE:
-1. Invoke Skill("workflow:verifier") and follow its procedure exactly.
-2. Read the step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
-3. Read project files and understand what was implemented
-4. EXECUTE verification (mandatory steps):
-   - Set up test environment (Docker, databases, services)
-   - Build/compile the project (if build fails → FAIL)
-   - Run ALL test suites (if any test fails → FAIL)
-   - Manually test each verification criterion by RUNNING the code
-   - Prove everything works with concrete evidence (test output, curl responses, etc.)
-5. On PASS: 
-   - Update frontmatter status → "complete"
-   - Fill Verification section with PASS notes and proof
-6. On FAIL:
-   - Update frontmatter status → "needs-fix"
-   - Increment iteration number
-   - Document "Issues Identified" section with exact errors and file locations
-7. Return a brief report (under 150 words): PASS or FAIL with evidence.
+Verify that step {N} implementation works correctly.
 
-AFTER COMPLETION:
-- Step file status MUST be "complete" or "needs-fix"
-- Report progress back to orchestrator"""
+### Step 1: Setup & Prepare
+- Read step file: {ABSOLUTE_PATH}/.workflow/{TASK_NAME}/steps/step-{N}-{slug}.md
+- Read verification criteria section
+- Understand what should work
+
+### Step 2: Environment Setup (MANDATORY)
+```bash
+npm install
+npm run build
+docker-compose up -d  # if using Docker
+docker-compose ps    # verify running
+```
+
+### Step 3: Verify Migrations (DO NOT RUN - ONLY CHECK)
+```bash
+# Check if migrations were run (not your job to run them)
+psql -c "SELECT * FROM schema_migrations;"
+# If incomplete → FAIL (implementer's responsibility)
+
+psql -c "\\dt"  # verify expected tables exist
+# If missing tables → FAIL
+```
+
+### Step 4: Run All Tests (MANDATORY)
+```bash
+npm test  # all tests MUST pass
+# If any fail → FAIL immediately
+```
+
+### Step 5: Manual Testing Against Criteria (MANDATORY)
+For each criterion in step-N.md:
+- If API endpoint: call it with `curl`, verify response code and data
+- If database: insert data, query DB with `psql`, verify persistence
+- If page: load page, verify content with `curl` or browser
+- If Docker service: verify container running, service accessible
+
+Examples:
+```bash
+# Test API
+curl -X POST http://localhost:3000/api/users \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Test","email":"test@example.com"}'
+# Check: 201 response with user ID
+
+# Test DB persistence
+psql -c "SELECT * FROM users WHERE email='test@example.com'"
+# Check: Row exists with correct data
+
+# Test error handling
+curl -X POST http://localhost:3000/api/users -d '{}' 
+# Check: 400 Bad Request (validation works)
+```
+
+### Step 6: Document Results
+
+For each criterion tested, document:
+- ✓ Criterion: [name]
+  - Tested: [what command/action]
+  - Expected: [expected result]
+  - Got: [actual result]
+  - Status: PASS or FAIL
+
+### Step 7: Decision
+
+If ALL tests pass AND ALL criteria verified:
+- Set status: "complete"
+- Fill "Verification Notes" with PASS proof
+- Report: PASS with evidence
+
+If ANY test fails OR ANY criterion fails:
+- Set status: "needs-fix"
+- Increment iteration counter
+- Create "Issues Identified" section:
+  ```
+  ### Issues Identified
+  1. [Issue name]
+     - File: path/to/file.ts:line
+     - Error: exact error message
+     - Proof: how you discovered it
+     - Fix needed: specific action
+  ```
+- Report: FAIL with specific issues
+
+### Step 8: Report Back
+Brief summary (under 150 words):
+- PASS or FAIL
+- Key evidence (test counts, curl responses, DB state)
+- Do NOT paste full output"""
 )
 ```
 
@@ -232,12 +356,31 @@ AFTER COMPLETION:
 6. **Read step-N.md again** to confirm status changed to `complete` or `needs-fix`
 7. **If FAIL:** Extract "Issues Identified" for next implementer cycle
 
-### Critical Differences from Main Session
+### How to Build & Call Agent() for Verifier:
 
-- **Verifier runs in isolated subagent context** (invisible to you)
+**Before calling Agent():**
+
+1. **Read step-N.md** (you, in main session)
+2. **Extract values:**
+   - All variables from step-N.md (name, number, iteration, etc.)
+   - Extract "Issues Identified" if status was `needs-fix`
+3. **Replace placeholders** in verifier prompt template above
+4. **Call Agent()** with completed prompt
+5. **WAIT** for Agent to return
+
+**After Agent returns:**
+- Read step-N.md to see updated status
+- Check if status = `complete` or `needs-fix`
+- Update PLAN.md
+- Continue loop
+
+### Critical: Subagent Isolation
+
+- **Verifier runs in completely isolated context** (invisible to you)
 - Build output, test runs, manual testing — all invisible
-- You only see brief summary + step file updates
-- This keeps your conversation clean while verifier works independently
+- You only see brief summary + updated step-N.md file
+- Isolation keeps your context clean
+- Each subagent starts fresh with no conversation history
 
 ## After Agent() Returns (You Still in Main Session)
 

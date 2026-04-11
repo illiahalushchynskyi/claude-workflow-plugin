@@ -82,7 +82,7 @@ The verifier skill:
 - List all files that were modified/created
 - Understand what should work
 
-### Step 2: Set Up Test Environment & Run Migrations
+### Step 2: Set Up Test Environment & Verify Migrations
 
 **MANDATORY**: Before testing anything:
 
@@ -99,22 +99,32 @@ docker-compose up -d  # if using Docker
 docker-compose ps  # verify all running
 ```
 
-3. **Run ALL migrations (CRITICAL):**
-```bash
-# If step modified ORM models or schema:
-npm run migrate  # or db:migrate, or whatever command
-# OR manually run migration files:
-psql -U user -d database -f migrations/001_*.sql
+3. **VERIFY migrations were applied (DO NOT RUN MIGRATIONS):**
 
-# Verify migrations actually applied:
+**IMPORTANT:** Your job is to VERIFY that implementer already ran migrations, not to run them yourself.
+
+Check if migrations exist and were applied:
+```bash
+# Check if migration files exist
+ls -la migrations/ || echo "No migrations directory"
+
+# Verify migrations ran (check migration history)
+psql -U user -d database -c "SELECT * FROM schema_migrations;"
+# Should show completed migrations, not pending
+
+# Verify schema is complete
 psql -U user -d database -c "\dt"  # list tables
-psql -U user -d database -c "SELECT * FROM schema_migrations;"  # check migration history
+# Check against step-N.md expected tables
 
 # If using other ORMs:
-npm run typeorm migration:run
-bundle exec rake db:migrate  # Rails
-python manage.py migrate  # Django
+sqlite3 db.sqlite3 "SELECT * FROM django_migrations;"  # Django
+rails db:migrate:status  # Rails
 ```
+
+**If migrations are INCOMPLETE or MISSING:**
+- ❌ This is a FAIL - implementer didn't run migrations
+- Document exact state: which migrations are missing, which tables don't exist
+- Do NOT try to fix it - return to implementer with findings
 
 4. **Check environment variables:**
 ```bash
@@ -124,7 +134,7 @@ test -f .env && echo ".env exists" || echo "ERROR: .env missing"
 
 If environment setup fails: **FAIL** — document exact error and blocker
 
-**CRITICAL: Do NOT skip migrations.** If schema changed, migrations MUST run before testing.
+**CRITICAL RULE: Verify migrations, don't run them. If they're incomplete, FAIL and let implementer fix.**
 
 ### Step 3: Build & Compile (MANDATORY)
 
