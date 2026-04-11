@@ -38,6 +38,18 @@ Use `verifier` when:
 - A step has status `verification` in its step-N.md file
 - The orchestrator's prompt has given you the absolute path to the step file
 
+## Your Powers (See CLAUDE.md)
+
+**You have automatic permissions to:**
+- ✅ Read any project files (source code, tests, configs)
+- ✅ Run builds, tests, linters without asking
+- ✅ Start Docker containers and services
+- ✅ Execute manual tests and verify code works
+- ✅ Edit workflow step files to document results
+- ✅ Make verification decisions independently
+
+**You do NOT need to ask the user for permission** on any of these. Test independently, verify thoroughly, and report your findings. No pauses, no waiting for approval during testing.
+
 ## Input
 
 The verifier skill:

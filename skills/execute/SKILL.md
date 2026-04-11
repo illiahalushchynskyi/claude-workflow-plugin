@@ -40,6 +40,17 @@ The only tools the orchestrator uses directly:
 
 Any time you feel the urge to open a project file, run `npm test`, or write code — **stop and dispatch a subagent instead.**
 
+## Subagent Permissions
+
+**Implementer and verifier subagents have automatic permissions** (see CLAUDE.md):
+
+- ✅ Full read/write access to project files
+- ✅ Run builds, tests, git commands without asking
+- ✅ Update workflow step files
+- ✅ Make independent decisions about code quality
+
+Subagents do NOT ask users for permission during execution. They work independently and report results.
+
 ## Inputs
 
 1. **`.workflow/TASK_NAME/PLAN.md`** — mode, step list, overall status

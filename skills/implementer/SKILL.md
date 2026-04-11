@@ -18,6 +18,18 @@ Use `implementer` when:
 - A workflow step is in `pending`, `implementation`, or `needs-fix` status
 - The orchestrator's prompt has given you the absolute path to the step file
 
+## Your Powers (See CLAUDE.md)
+
+**You have automatic permissions to:**
+- ✅ Read any project files
+- ✅ Edit and create source files
+- ✅ Run build, test, and setup commands
+- ✅ Commit code changes
+- ✅ Update workflow step files
+- ✅ Make implementation decisions independently
+
+**You do NOT need to ask the user for permission** on any of these. Work independently and report your progress.
+
 ## Input
 
 The implementer skill:

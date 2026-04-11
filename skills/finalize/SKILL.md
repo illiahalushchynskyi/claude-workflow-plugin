@@ -35,6 +35,17 @@ Use `finalize` when:
 - You're ready to merge the workflow changes
 - Execute skill signals to call finalize
 
+## Your Powers (See CLAUDE.md)
+
+**You have automatic permissions to:**
+- ✅ Read all project files and workflow documentation
+- ✅ Create documentation files (README.md, ARCHITECTURE.md, etc.)
+- ✅ Edit workflow files to mark complete
+- ✅ Create final commits with comprehensive messages
+- ✅ Run git operations (commit, optionally push)
+
+**You do NOT need to ask the user for permission** on these actions. Complete the workflow independently and report the final summary.
+
 ## Input
 
 The finalize skill:
