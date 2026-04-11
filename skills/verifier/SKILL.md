@@ -82,24 +82,49 @@ The verifier skill:
 - List all files that were modified/created
 - Understand what should work
 
-### Step 2: Set Up Test Environment
+### Step 2: Set Up Test Environment & Run Migrations
 
 **MANDATORY**: Before testing anything:
-- Verify you can run the project
-- Install/start any dependencies (Docker containers, databases, services)
-- Check environment variables are set
-- Verify project structure is correct
 
+1. **Install and build project:**
 ```bash
-# Always do this first
 npm install  # or yarn, or language equivalent
-# Start services if needed
-docker-compose up -d  # if using Docker
-# Check setup worked
 npm run build  # or equivalent
 ```
 
+2. **Start services:**
+```bash
+docker-compose up -d  # if using Docker
+# Wait for containers to be healthy
+docker-compose ps  # verify all running
+```
+
+3. **Run ALL migrations (CRITICAL):**
+```bash
+# If step modified ORM models or schema:
+npm run migrate  # or db:migrate, or whatever command
+# OR manually run migration files:
+psql -U user -d database -f migrations/001_*.sql
+
+# Verify migrations actually applied:
+psql -U user -d database -c "\dt"  # list tables
+psql -U user -d database -c "SELECT * FROM schema_migrations;"  # check migration history
+
+# If using other ORMs:
+npm run typeorm migration:run
+bundle exec rake db:migrate  # Rails
+python manage.py migrate  # Django
+```
+
+4. **Check environment variables:**
+```bash
+# Verify .env exists and has required vars
+test -f .env && echo ".env exists" || echo "ERROR: .env missing"
+```
+
 If environment setup fails: **FAIL** — document exact error and blocker
+
+**CRITICAL: Do NOT skip migrations.** If schema changed, migrations MUST run before testing.
 
 ### Step 3: Build & Compile (MANDATORY)
 
@@ -145,55 +170,138 @@ npm run test:e2e
 - If ANY test fails → **FAIL** the step
 - "Test failures don't matter" is not an option
 
-### Step 5: Manual Testing Against Criteria (MANDATORY)
+### Step 5: Manual Testing Against Criteria (MANDATORY EXECUTION)
 
-**You MUST manually verify each criterion actually works:**
+**You MUST manually verify each criterion by ACTUALLY RUNNING the code:**
 
 For each verification criterion in step-N.md:
 
-**Example: "POST /api/auth/token responds with 200 on valid credentials"**
-```bash
-# Start the running service first
-npm run dev &  # or docker run, or whatever starts the service
+#### Testing API Endpoints
 
-# Then actually test it
+**If criterion mentions API endpoint (e.g., "POST /api/auth/token responds with 200 on valid credentials"):**
+
+```bash
+# 1. Start the service
+npm run dev &  # or npm start, or docker run
+
+# 2. Wait for service to be ready
+sleep 2
+curl http://localhost:3000/health  # or health check endpoint
+
+# 3. Execute the API call with actual data
 curl -X POST http://localhost:3000/api/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","password":"testpass"}'
 
-# Verify: Check response is 200, not 500/400/401
-# Verify: Check response has "access_token" field
+# 4. Capture and verify response
+# - Check HTTP status code (200, 201, 400, 401, 500, etc.)
+# - Check response body has expected fields
+# - Check data types are correct
+
+# 5. Test edge cases
+curl -X POST http://localhost:3000/api/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username":"","password":""}'
+# Should return 400 or 401 (error case)
+
+# 6. Test with real data if applicable
+curl -X GET http://localhost:3000/api/users/123 \
+  -H "Authorization: Bearer TOKEN"
+# Verify it returns user data or 404 if user doesn't exist
 ```
 
-**Example: "Docker setup with database works"**
+#### Testing Database Operations
+
+**If criterion mentions database (e.g., "Data is persisted to database"):**
+
 ```bash
-# Start containers
+# 1. Check migrations ran
+psql -U user -d dbname -c "SELECT * FROM schema_migrations;"
+
+# 2. Run the operation that should persist data
+curl -X POST http://localhost:3000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John","email":"john@example.com"}'
+# Should return success with new user ID (e.g., 123)
+
+# 3. Verify data actually persisted
+psql -U user -d dbname -c "SELECT * FROM users WHERE id = 123;"
+# Should show: id | name  | email              | created_at
+#             123 | John | john@example.com | 2026-04-11 ...
+
+# 4. Query via API to verify it returns the data
+curl http://localhost:3000/api/users/123
+# Should return the same data you just inserted
+```
+
+#### Testing Web Pages/Routes
+
+**If criterion mentions web pages (e.g., "/dashboard loads and displays user data"):**
+
+```bash
+# 1. Start the service
+npm run dev &
+
+# 2. Test page loads and has expected content
+curl http://localhost:3000/dashboard
+
+# 3. If page requires authentication, include auth header
+curl http://localhost:3000/dashboard \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 4. Check response contains expected elements
+# Example: page should have "Welcome John" text
+curl http://localhost:3000/dashboard | grep "Welcome"
+# If found, criterion passes
+
+# 5. Check for errors
+curl http://localhost:3000/dashboard 2>&1 | grep -i "error"
+# Should return nothing (no errors)
+```
+
+#### Testing Docker/Services
+
+**If criterion mentions Docker or services:**
+
+```bash
+# 1. Start containers
 docker-compose up -d
 
-# Actually verify database is accessible
+# 2. Verify they're running
+docker-compose ps
+# All should show "Up"
+
+# 3. Test service is accessible
 docker exec postgres_container psql -U user -d dbname -c "SELECT 1"
-# Should return: 1 (not connection error, not "not found")
+# Should return: 1
 
-# Verify migrations ran
-docker exec postgres_container psql -U user -d dbname -c "\\dt"
-# Should show tables (not empty)
-
-# Run application and test it talks to DB
-npm start
-# Then curl/test endpoints to verify data persistence
+# 4. Verify service responds to requests
+curl http://localhost:5432 2>&1 || echo "Database ready (port 5432)"
 ```
 
-**Do NOT just read the code and assume it works.**
-- If criterium is "database connection", actually test the connection
-- If criterium is "API returns data", actually call the API and check response
-- If criterium is "Docker runs", actually start Docker and verify it's healthy
-
-Document results:
+**Document ALL results:**
 ```markdown
-- ✓ Criterion 1: [what you tested] → [result: working/not working]
-- ✓ Criterion 2: [proof of execution]
-- ✗ Criterion 3: [error message showing it failed]
+- ✓ Criterion 1: POST /api/auth/token
+  - Tested: curl -X POST http://localhost:3000/api/auth/token with valid credentials
+  - Expected: 200 response with access_token field
+  - Got: 200, response: {"access_token":"eyJ...", "expires_in":3600}
+  - Result: PASS
+  
+- ✓ Criterion 2: Data persists to database
+  - Created user via API: POST /api/users with name="John"
+  - Verified in DB: psql ... SELECT * FROM users WHERE name='John'
+  - Found: 1 row with correct data
+  - Queried via API: GET /api/users/1 returns same data
+  - Result: PASS
+
+- ✗ Criterion 3: API error handling
+  - Tested: POST /api/auth/token with empty password
+  - Expected: 400 Bad Request with error message
+  - Got: 200 OK (should reject empty password)
+  - Result: FAIL
 ```
+
+**CRITICAL RULE: If you can execute it, you MUST execute it. Do not assume it works.**
 
 ### Step 6: Linting & Code Quality
 
@@ -285,6 +393,11 @@ Document exact proof that code doesn't work - not just opinions:
 **Verifier**: Claude - 2026-04-08 15:35
 - Environment: ✓ Setup successful
 - Build: ✓ Compilation passed
+- Migrations: ✗ FAILED
+  - Ran: `npm run migrate`
+  - Error: `Migration 003_add_users_table.sql failed: column "email" already exists`
+  - Status: Migrations did not complete
+  - Impact: Database schema is in inconsistent state
 - Tests: ✗ FAILED (2 tests failing out of 47)
   - Test "should reject empty password" FAILED
     - Expected: 401 Unauthorized
@@ -295,34 +408,35 @@ Document exact proof that code doesn't work - not just opinions:
     - Got: token verification succeeded (no expiry check)
     - File: backend/src/services/__tests__/TokenService.test.ts:89
 - Manual testing: ✗ CRITICAL FAILURES
-  - Docker container failed to start
-    - Command: `docker-compose up -d`
-    - Error: `ERROR: yaml parsing error in 'docker-compose.yml' line 5: mapping values are not allowed here`
-    - Docker containers NOT running
-  - Database not accessible
-    - Tried: `docker exec postgres_container psql -U user -d dbname -c "SELECT 1"`
-    - Error: `Error: No such container: postgres_container`
-    - **Cannot test API because no database available**
-  - API endpoint unreachable
-    - Tried: `npm start` → returned error
-    - Error output: `ENOENT: no such file or directory, open '.env'`
-    - Missing .env file configuration
+  - Docker container started ✓
+  - Database accessible ✓
+  - API endpoint tested:
+    - Tried: `curl -X POST http://localhost:3000/api/auth/token ...`
+    - Got: 500 Internal Server Error
+    - Error: `database error: column "user_id" does not exist`
+    - Cause: Migration failed, schema incomplete
+  - Database state:
+    - Expected tables: users, tokens, roles
+    - Found tables: users, tokens (roles missing)
+    - `SELECT * FROM schema_migrations` shows only 2/3 migrations completed
 
 **Result**: FAIL
 
 ### Issues Identified (Proof of Failure)
 
-**CRITICAL - Setup Broken:**
-1. Docker Compose syntax error in docker-compose.yml (line 5)
-   - Current: [paste the problematic line]
-   - Expected: Valid YAML
-   - Impact: Container won't start, database inaccessible
+**CRITICAL - Migrations Failed:**
+1. Migration 003_add_users_table.sql has syntax error
+   - File: migrations/003_add_users_table.sql
+   - Error: `column "email" already exists`
+   - Cause: Column defined twice (duplicated in migration)
+   - Fix: Remove duplicate column definition
+   - Proof: `npm run migrate` failed with this exact error
 
-2. Missing .env file
-   - Tried to start: `npm start`
-   - Error: `ENOENT: no such file or directory, open '.env'`
-   - Need: `.env` with DATABASE_URL and other required vars
-   - Impact: Application cannot start
+2. Database schema is incomplete
+   - Expected tables: users, tokens, roles
+   - Actual tables: users, tokens (missing: roles)
+   - Verified with: `psql -c "\dt"` shows only 2/3 tables
+   - Impact: API endpoints referencing roles table will fail
 
 **Code Issues Found:**
 1. TokenService.sign() doesn't validate empty passwords
@@ -331,18 +445,21 @@ Document exact proof that code doesn't work - not just opinions:
    - Should: Reject passwords shorter than 8 characters
    - Test failure proves this
 
-2. No token expiry checking
-   - File: backend/src/services/TokenService.ts
-   - Current: No expiration field in JWT payload
-   - Should: Include exp claim, verify on token use
-   - Test failure proves this
+2. API endpoint returns 500 on missing database column
+   - File: backend/src/routes/auth.ts:42
+   - Error: `database error: column "user_id" does not exist`
+   - Cause: Migration didn't create user_id column (migration failed)
+   - Fix: Fix migration, re-run migrations, then API will work
 
 **Implementer Action Required:**
-1. Fix docker-compose.yml syntax (line 5 - check YAML formatting)
-2. Create .env file with required variables (copy from .env.example or docs)
-3. Add password validation to TokenService.sign() - reject if < 8 chars
-4. Add token expiry: include exp in JWT payload, verify in token validation
-5. Test Docker setup: `docker-compose up -d && docker-compose ps` should show containers running
+1. Fix migration syntax error in migrations/003_add_users_table.sql
+   - Remove duplicate column definition
+   - Test locally: `npm run migrate` should complete without errors
+2. Verify all migrations run: `psql -c "SELECT * FROM schema_migrations"` should show all 3
+3. Verify schema: `psql -c "\dt"` should show users, tokens, roles tables
+4. Fix TokenService.sign() password validation
+5. Test API endpoint: `curl http://localhost:3000/api/auth/token` should return valid response (not 500)
+6. Run full test suite again: `npm test` should pass
 
 ---
 
@@ -429,19 +546,52 @@ Verifier should create a checklist for each step's verification. Example:
 - [ ] PASS or FAIL?
 ```
 
+## Red Flags - Stop If You See These
+
+If any of these happen, FAIL the step immediately:
+
+**Database/Migrations:**
+- ❌ `npm run migrate` failed with error → FAIL (schema incomplete)
+- ❌ Migration files aren't created when ORM models changed → FAIL
+- ❌ `psql \dt` doesn't show expected tables → FAIL
+- ❌ `schema_migrations` table shows incomplete migrations → FAIL
+- ❌ Database connection error → FAIL
+- ❌ "column does not exist" error from API → FAIL (schema mismatch)
+
+**API/Endpoint Testing:**
+- ❌ API endpoint returns 500 error → FAIL (don't accept it)
+- ❌ "Could not establish connection" → FAIL
+- ❌ API expected but doesn't respond → FAIL
+- ❌ Response is empty or malformed → FAIL
+- ❌ You assume API works without testing it → FAIL (you MUST curl/test it)
+
+**Code Review Without Execution:**
+- ❌ "Code looks correct" without running tests → FAIL
+- ❌ "Migrations should work" without running `npm run migrate` → FAIL
+- ❌ "API endpoint exists" without calling it with curl → FAIL
+- ❌ Skipping manual testing "because tests pass" → FAIL
+
+**What Counts as Proof:**
+- ✅ `npm run migrate` completed successfully
+- ✅ All tables exist: `psql -c "\dt"` shows them
+- ✅ API test result: `curl ... ` returns 200 with correct data
+- ✅ Database persistence verified: Data inserted via API, confirmed in DB
+- ✅ Test output: `npm test` shows 0 failures
+- ✅ Error message captured: Exact error text with file and line number
+
 ## Detailed Issue Reporting
 
-When reporting FAIL, be specific:
+When reporting FAIL, be specific with PROOF:
 
 **Good:**
-- "TokenService.sign() doesn't catch database errors on line 18"
-- "Test 'should reject empty password' expects error but got success"
-- "Type TokenPayload.role is string but should be 'admin' | 'user'"
+- "Migration failed: `npm run migrate` error: column 'email' already exists in migrations/003_add_users_table.sql"
+- "API endpoint returned 500: curl http://localhost:3000/api/auth/token gave error 'column user_id does not exist'"
+- "Test 'should reject empty password' expected 401 but got 200 at backend/src/services/__tests__/TokenService.test.ts:45"
 
 **Vague (not helpful):**
 - "Something's wrong with the auth"
 - "Tests are failing"
-- "Type issues"
+- "Migrations might not work"
 
 **Implementer uses specific issues to know exactly what to fix.**
 

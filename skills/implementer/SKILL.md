@@ -65,6 +65,13 @@ The implementer skill:
 - Commit frequently to feature branch for history
 - Run local tests/checks as you go
 
+**If modifying ORM models, database schema, or migrations:**
+- Create migration files if needed
+- Run migrations immediately: `npm run migrate` (or equivalent)
+- Verify schema changes applied: `psql ... \dt` or database inspect command
+- Do NOT assume migrations will run later — run them NOW
+- Test that code works with actual schema
+
 ### Step 3: Documentation & Status Update
 
 Update `step-N.md` implementation section with:
