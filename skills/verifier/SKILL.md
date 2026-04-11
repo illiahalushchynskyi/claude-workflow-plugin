@@ -1,6 +1,6 @@
 ---
 name: workflow:verifier
-description: Test a workflow step and mark complete - runs verification criteria and gates advancement to the next step
+description: Use when a workflow step is ready for verification - executes builds, tests, and manual testing to prove code actually works
 ---
 
 # Workflow Verifier Skill
@@ -14,9 +14,20 @@ The `verifier` skill tests and validates a completed workflow step. It reads the
 **The verifier is the ONLY agent that can mark a step as `complete`.** This is a critical safety gate:
 
 - Implementer NEVER marks a step complete — only as `verification`
-- Verifier checks against verification criteria
-- On PASS: marks `complete`, unblocks next step
-- On FAIL: marks `needs-fix`, returns to implementer
+- Verifier **MUST EXECUTE the code** to verify it actually works
+- Verifier is NOT a code reviewer — it's a tester
+- On PASS: marks `complete` with proof it was tested and works
+- On FAIL: marks `needs-fix` with exact evidence of what broke
+
+**MANDATORY EXECUTION RULE:**
+You MUST NOT approve code just by reading it. You MUST:
+- Build the project (if it doesn't compile → FAIL)
+- Run all tests (if any fail → FAIL)
+- Manually test each verification criterion by actually running the code
+- If something can be tested by execution, you MUST execute it to test it
+- Docker/database/service claims must be verified by actually starting and testing the service
+
+**Do NOT say "looks correct" or "should work". Say "I tested it and it works" with proof.**
 
 **This skill is designed to run inside a subagent dispatched by `workflow:execute` via the `Agent` tool.** The orchestrator invokes an `Agent` call whose prompt tells the subagent to load this skill. The subagent has its own isolated context, which keeps test output and code reads out of the orchestrator's conversation. Do NOT invoke this skill directly in the main orchestrator conversation.
 
@@ -49,74 +60,139 @@ The verifier skill:
 
 ## Verification Process
 
+**CRITICAL: You MUST actually execute the code. Do not just read it. Every step below is MANDATORY — no skipping any phase.**
+
 ### Step 1: Preparation
 
 - Read step-N.md verification criteria section
-- Identify all criteria that must pass
+- Identify ALL criteria that must pass (create a checklist)
 - Review implementer notes for context and any known issues
-- Check what files were modified/created
+- List all files that were modified/created
+- Understand what should work
 
-### Step 2: Manual Code Review
+### Step 2: Set Up Test Environment
 
-- Read the code changes made by implementer
-- Check for:
-  - Correctness against verification criteria
-  - Consistency with project patterns
-  - Type safety (if TypeScript)
-  - Error handling
-  - Edge cases
-
-### Step 3: Build & Compile
-
-Run compilation/build steps:
+**MANDATORY**: Before testing anything:
+- Verify you can run the project
+- Install/start any dependencies (Docker containers, databases, services)
+- Check environment variables are set
+- Verify project structure is correct
 
 ```bash
-# Example for TypeScript project
+# Always do this first
+npm install  # or yarn, or language equivalent
+# Start services if needed
+docker-compose up -d  # if using Docker
+# Check setup worked
+npm run build  # or equivalent
+```
+
+If environment setup fails: **FAIL** — document exact error and blocker
+
+### Step 3: Build & Compile (MANDATORY)
+
+Run compilation/build steps - this is NOT optional:
+
+```bash
+# TypeScript/Node projects
 npm run build
-tsc --noEmit  # Type check without output
+tsc --noEmit
+
+# Other languages - use your equivalent
+cargo build
+go build
+./gradlew build
 ```
 
-If build fails: **FAIL** — document error, return to implementer
+**CRITICAL: If build fails for ANY reason → FAIL the step immediately.**
+- Document exact error message
+- Do not try to "work around" it
+- Return for implementer to fix
 
-### Step 4: Run Tests
+### Step 4: Run Automated Tests (MANDATORY)
 
-Execute test suites for affected code:
+Execute ALL test suites:
 
 ```bash
-# Example: run tests for modified module
-npm run test -- backend/src/services/TokenService.ts
-npm run test -- --coverage  # Get coverage metrics if available
+# Run complete test suite
+npm test
+
+# If specific test framework:
+npm run test -- --verbose  # See which tests pass/fail
+npm run test -- --coverage  # Verify coverage
+
+# For projects with multiple test suites:
+npm run test:unit
+npm run test:integration
+npm run test:e2e
 ```
 
-Check:
-- All tests passing
-- No regressions
-- Coverage adequate for changes
+**CRITICAL:**
+- All tests MUST pass
+- Document exact test output: number passing, number failing
+- If ANY test fails → **FAIL** the step
+- "Test failures don't matter" is not an option
 
-### Step 5: Manual Testing
+### Step 5: Manual Testing Against Criteria (MANDATORY)
 
-Test against verification criteria. Example criteria verification:
+**You MUST manually verify each criterion actually works:**
 
-**Criterion:** "POST /api/auth/token responds with 200 on valid credentials"
-- **Test:** Call endpoint with valid user credentials → expect 200
-- **Check:** Response includes expected fields
+For each verification criterion in step-N.md:
 
-**Criterion:** "Token contains user ID and role in payload"
-- **Test:** Decode returned JWT → check payload structure
-- **Check:** User ID matches request, role is correct
+**Example: "POST /api/auth/token responds with 200 on valid credentials"**
+```bash
+# Start the running service first
+npm run dev &  # or docker run, or whatever starts the service
 
-**Criterion:** "Invalid credentials return 401"
-- **Test:** Call endpoint with bad password → expect 401
-- **Check:** No token returned
+# Then actually test it
+curl -X POST http://localhost:3000/api/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser","password":"testpass"}'
+
+# Verify: Check response is 200, not 500/400/401
+# Verify: Check response has "access_token" field
+```
+
+**Example: "Docker setup with database works"**
+```bash
+# Start containers
+docker-compose up -d
+
+# Actually verify database is accessible
+docker exec postgres_container psql -U user -d dbname -c "SELECT 1"
+# Should return: 1 (not connection error, not "not found")
+
+# Verify migrations ran
+docker exec postgres_container psql -U user -d dbname -c "\\dt"
+# Should show tables (not empty)
+
+# Run application and test it talks to DB
+npm start
+# Then curl/test endpoints to verify data persistence
+```
+
+**Do NOT just read the code and assume it works.**
+- If criterium is "database connection", actually test the connection
+- If criterium is "API returns data", actually call the API and check response
+- If criterium is "Docker runs", actually start Docker and verify it's healthy
+
+Document results:
+```markdown
+- ✓ Criterion 1: [what you tested] → [result: working/not working]
+- ✓ Criterion 2: [proof of execution]
+- ✗ Criterion 3: [error message showing it failed]
+```
 
 ### Step 6: Linting & Code Quality
 
-Run linting if available:
+Run linting if available (this is lower priority than test execution):
 
 ```bash
 npm run lint
 npm run format --check
 ```
+
+If linting fails but tests pass: PASS (with note to implementer), don't fail the whole step
 
 ### Step 7: Documentation Check
 
@@ -126,11 +202,15 @@ Verify documentation is present:
 - API endpoint documentation if applicable
 - Updated README if user-facing changes
 
+If doc is minimal: PASS (prefer working code to perfect docs), note in report
+
 ## Output
 
 Updates `.workflow/TASK_NAME/steps/step-N.md`:
 
 ### On PASS
+
+All phases completed successfully with evidence that code actually works:
 
 ```markdown
 ## Verification
@@ -138,15 +218,27 @@ Updates `.workflow/TASK_NAME/steps/step-N.md`:
 ### Verification Notes
 
 **Verifier**: Claude - 2026-04-08 15:30
-- Code review: No issues found
-- Build: ✓ No TypeScript errors
-- Tests: ✓ All tests passing (8 new tests added)
-- Manual testing: ✓ All criteria verified
+- Environment: ✓ Setup successful (Node 18, npm 8, Docker running)
+- Build: ✓ npm run build completed with no errors
+- Tests: ✓ All tests passing
+  - 45 total tests
+  - 8 new tests added for this step
+  - 0 failures
+  - Coverage: 92%
+- Manual testing: ✓ All criteria verified by actual execution
   - ✓ POST /api/auth/token returns 200 on valid credentials
+    - Tested: `curl -X POST http://localhost:3000/api/auth/token ...`
+    - Response: `{"access_token":"eyJ...", "expires_in":3600}`
   - ✓ Token payload contains userId and role
+    - Decoded token: `{userId:"123", role:"admin"}`
   - ✓ Invalid credentials return 401
+    - Tested with wrong password: returned 401 Unauthorized
   - ✓ Token verified with correct JWT_SECRET
-- Linting: ✓ No issues
+    - verify() method confirmed token signature
+  - ✓ Docker container started and database accessible
+    - `docker exec postgres_container psql ... SELECT 1` returned 1
+    - Tables exist: users, tokens, roles (verified with \dt)
+- Linting: ✓ No issues (ESLint clean)
 - Documentation: ✓ Endpoint documented in API docs
 
 **Result**: PASS
@@ -157,6 +249,12 @@ Updates `.workflow/TASK_NAME/steps/step-N.md`:
 - Iteration 1: 2026-04-08 - Implementation → Verification → PASS ✓
 ```
 
+**PROOF that code works:**
+- Build output (no errors)
+- Test output (all passing)
+- Manual test results (curl responses, database queries, container status)
+- Not just "reviewed code and it looks correct"
+
 Also updates frontmatter:
 
 ```yaml
@@ -165,48 +263,81 @@ status: complete
 
 ### On FAIL
 
+Document exact proof that code doesn't work - not just opinions:
+
 ```markdown
 ## Verification
 
 ### Verification Notes
 
 **Verifier**: Claude - 2026-04-08 15:35
-- Code review: Found issues
-  - Missing error handling for database connection failures
-  - Type mismatch in TokenPayload interface
-- Build: ✓ No TypeScript errors
-- Tests: ✗ 2 tests failing
-  - Test "should reject empty password" failed
-  - Test "should handle expired tokens" not implemented
-- Manual testing: ✗ Endpoint returns 500 on edge case
+- Environment: ✓ Setup successful
+- Build: ✓ Compilation passed
+- Tests: ✗ FAILED (2 tests failing out of 47)
+  - Test "should reject empty password" FAILED
+    - Expected: 401 Unauthorized
+    - Got: 200 OK (test expected rejection)
+    - File: backend/src/services/__tests__/TokenService.test.ts:45
+  - Test "should handle expired tokens" FAILED
+    - Expected: token verification to fail on expired token
+    - Got: token verification succeeded (no expiry check)
+    - File: backend/src/services/__tests__/TokenService.test.ts:89
+- Manual testing: ✗ CRITICAL FAILURES
+  - Docker container failed to start
+    - Command: `docker-compose up -d`
+    - Error: `ERROR: yaml parsing error in 'docker-compose.yml' line 5: mapping values are not allowed here`
+    - Docker containers NOT running
+  - Database not accessible
+    - Tried: `docker exec postgres_container psql -U user -d dbname -c "SELECT 1"`
+    - Error: `Error: No such container: postgres_container`
+    - **Cannot test API because no database available**
+  - API endpoint unreachable
+    - Tried: `npm start` → returned error
+    - Error output: `ENOENT: no such file or directory, open '.env'`
+    - Missing .env file configuration
 
 **Result**: FAIL
 
-### If Issues Found
+### Issues Identified (Proof of Failure)
 
-**Issues Identified:**
-1. Database connection errors not caught
-   - Missing try/catch in TokenService.sign()
-   - Need to return 500 with error message
-   
-2. Empty password test not implemented
-   - TokenService should validate password length
-   - Test file missing edge case
+**CRITICAL - Setup Broken:**
+1. Docker Compose syntax error in docker-compose.yml (line 5)
+   - Current: [paste the problematic line]
+   - Expected: Valid YAML
+   - Impact: Container won't start, database inaccessible
 
-3. Type mismatch
-   - TokenPayload.role should be string | Role enum, currently just string
+2. Missing .env file
+   - Tried to start: `npm start`
+   - Error: `ENOENT: no such file or directory, open '.env'`
+   - Need: `.env` with DATABASE_URL and other required vars
+   - Impact: Application cannot start
+
+**Code Issues Found:**
+1. TokenService.sign() doesn't validate empty passwords
+   - File: backend/src/services/TokenService.ts:18-25
+   - Current: Accepts any password, even ""
+   - Should: Reject passwords shorter than 8 characters
+   - Test failure proves this
+
+2. No token expiry checking
+   - File: backend/src/services/TokenService.ts
+   - Current: No expiration field in JWT payload
+   - Should: Include exp claim, verify on token use
+   - Test failure proves this
 
 **Implementer Action Required:**
-- Fix try/catch in TokenService.sign() (lines 15-20)
-- Add password validation before signing token
-- Update TokenPayload type definition
+1. Fix docker-compose.yml syntax (line 5 - check YAML formatting)
+2. Create .env file with required variables (copy from .env.example or docs)
+3. Add password validation to TokenService.sign() - reject if < 8 chars
+4. Add token expiry: include exp in JWT payload, verify in token validation
+5. Test Docker setup: `docker-compose up -d && docker-compose ps` should show containers running
 
 ---
 
 **History**: 
 - Iteration 1: 2026-04-08 - Implementation → Verification → FAIL ✗
-  - Issues: [listed above]
   - Status: Awaiting implementer fixes
+  - Cannot proceed until: Docker runs, database accessible, all tests pass
 ```
 
 Also updates frontmatter:
@@ -215,6 +346,16 @@ Also updates frontmatter:
 status: needs-fix
 iteration: 2
 ```
+
+**KEY CHANGES:**
+- **Before:** "Missing error handling" (vague opinion)
+- **After:** "Tried to start with `npm start` → got `ENOENT: no such file .env`" (proof)
+
+- **Before:** "Tests failing" (no details)
+- **After:** "Test 'should reject empty password' expected 401, got 200 (line 45)" (exact failure)
+
+- **Before:** "Docker doesn't work" (untested)
+- **After:** "`docker-compose up -d` failed with YAML error on line 5` (proof of failure)
 
 ## Mode-Specific Behavior
 
@@ -294,7 +435,16 @@ When reporting FAIL, be specific:
 
 ## Returning to the Orchestrator
 
-After updating the step file, return a brief report (under ~150 words) to the orchestrator stating PASS or FAIL and the key evidence. Do NOT paste full test output, full diffs, or file contents — the orchestrator does not need them and relies on the step file for details.
+After updating the step file, return a brief report (under ~150 words) to the orchestrator stating PASS or FAIL and the key evidence. Include:
+- **On PASS:** Build passed, all tests passed (with counts), manual testing completed
+- **On FAIL:** Exact command that failed, exact error message, what's broken
+
+Do NOT paste full test output dumps — summarize. But DO include enough evidence that someone reading the report would understand why you passed/failed it.
+
+Example:
+- ✅ GOOD: "Docker setup: `docker-compose up -d` succeeded, containers running, database accessible. 45 tests passed. Manual testing: verified all 6 criteria work correctly."
+- ❌ BAD: "Looks good, Docker should work"
+- ❌ BAD: "[100 lines of test output]"
 
 ## Related Skills
 

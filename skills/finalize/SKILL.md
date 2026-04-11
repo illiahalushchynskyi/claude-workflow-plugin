@@ -1,6 +1,6 @@
 ---
 name: workflow:finalize
-description: Create final commit after workflow completion and generate project documentation - summarizes all steps, marks workflow as complete, and creates comprehensive docs
+description: Use when a workflow is approved and ready to finalize - creates completion commit and generates project documentation
 ---
 
 # Workflow Finalize Skill

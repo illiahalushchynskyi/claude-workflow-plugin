@@ -1,6 +1,6 @@
 ---
 name: workflow:implementer
-description: Execute implementation work for a workflow step - modifies code and updates step tracking files with detailed notes
+description: Use when a workflow step is in implementation phase - executes code changes and updates step tracking
 ---
 
 # Workflow Implementer Skill
