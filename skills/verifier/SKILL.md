@@ -81,7 +81,9 @@ If all pass:
 
 ### Step 5: Manual Test Each Criterion
 
-For each verification criterion in step file:
+Read acceptance criteria from step-N.md and test EACH ONE explicitly.
+
+**For each criterion: Test → Record → Mark as ✓ passed or ✗ not passed**
 
 **IF criterion is about API endpoint:**
 ```
@@ -163,15 +165,35 @@ Update {TASK_DIR}/steps/step-{N}.md:
 ### Verification Notes
 
 **Verifier**: Claude - {DATE}
-- Setup: ✓ Build successful, Docker running
-- Migrations: ✓ All applied, schema complete
-- Tests: ✓ 45 passing, 0 failing
-- Criteria:
-  - ✓ API returns 200: tested with curl
-  - ✓ Data persists: inserted and verified in DB
-  - ✓ Page loads: tested with curl, content verified
 
-**Result**: PASS
+**Setup & Build:**
+- ✓ npm install successful
+- ✓ npm run build successful
+- ✓ All migrations applied
+- ✓ Tests: 45 passing, 0 failing
+
+**Acceptance Criteria Results:**
+
+For each criterion from step-N.md, mark passed/not passed with evidence:
+
+1. **Criterion: "API POST /users returns 201 status"**
+   - Status: ✓ PASSED
+   - Evidence: curl -X POST http://localhost:3000/api/users returned 201
+   - Details: Response body: {"id": 123, "name": "test"}
+
+2. **Criterion: "User record inserted in database"**
+   - Status: ✓ PASSED
+   - Evidence: psql query: SELECT * FROM users WHERE id=123 returned record
+   - Details: Record has correct name, email fields
+
+3. **Criterion: "Page /users displays user count"**
+   - Status: ✗ NOT PASSED
+   - Reason: Page shows error "Cannot read property 'length' of undefined"
+   - Evidence: curl http://localhost:3000/users returned HTML with error
+   - Fix needed: Verifier found template bug - implementer must fix
+
+**Summary**: 2/3 criteria passed, 1 needs fix
+**Result**: NEEDS-FIX
 ```
 
 ### Step 7: Make Decision
@@ -226,9 +248,10 @@ Report to execute:
 - ✅ Run all tests - fail if any fail
 - ✅ Check migrations ran (don't run them)
 - ✅ Manually test EACH criterion with actual execution
-- ✅ Document with proof (curl output, psql results)
+- ✅ For EACH criterion: Mark ✓ passed or ✗ not passed with specific reason
+- ✅ Document with proof (curl output, psql results, test names)
 - ✅ Set status = complete or needs-fix
-- ✅ Fill Verification section
+- ✅ Fill Verification section with structured criteria results
 
 **NEVER:**
 - ❌ Run migrations yourself

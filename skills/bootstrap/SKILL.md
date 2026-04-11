@@ -43,9 +43,22 @@ Ask user for missing information:
 - List of steps with:
   - Step name
   - Goal
-  - Success criteria (at least 3 per step)
+  - Acceptance criteria (at least 3 per step - these are what verifier will check)
 
 Use AskUserQuestion if any field missing.
+
+**Acceptance Criteria Format:**
+Each criterion must be:
+- **Specific** - not vague like "it works" or "feature is done"
+- **Testable** - can verify with concrete proof (curl output, DB query, test output, etc.)
+- **Independent** - can verify each criterion separately
+- **Examples:**
+  - ✓ GOOD: "API POST /users returns 201 status and user object with id field"
+  - ✓ GOOD: "Database table contains inserted user record with correct name"
+  - ✗ BAD: "User endpoint works correctly"
+  - ✗ BAD: "Everything is done"
+
+When user provides acceptance criteria, validate they meet this standard. Ask for clarification if criteria are too vague.
 
 ### Step 2: Create Directory Structure
 
@@ -75,17 +88,19 @@ completed: null
 
 ## Steps Overview
 
-| Step | Name | Status | Iteration | Notes |
-|------|------|--------|-----------|-------|
-| 1 | {Step 1 Name} | pending | 1 | Initial |
-| 2 | {Step 2 Name} | pending | 1 | Initial |
-| ... | ... | ... | ... | ... |
-| N | {Step N Name} | pending | 1 | Initial |
+| Step | Name | Status | Iteration | Acceptance Criteria | Notes |
+|------|------|--------|-----------|-------------------|-------|
+| 1 | {Step 1 Name} | pending | 1 | See step-1.md | Initial |
+| 2 | {Step 2 Name} | pending | 1 | See step-2.md | Initial |
+| ... | ... | ... | ... | ... | ... |
+| N | {Step N Name} | pending | 1 | See step-N.md | Initial |
 
 ## Execution Notes
 
 - Mode: {1=Step-by-Step|2=End-to-End}
 - Status: {planning|executing|ready-for-review|approved|complete}
+
+**Note:** Acceptance Criteria column references the detailed criteria in each step file. Verifier uses these criteria to mark each as ✓ passed or ✗ not passed.
 ```
 
 ### Step 4: Generate step-N.md Files
@@ -111,12 +126,21 @@ created: {TODAY}
 
 - [To be determined by implementer]
 
-## Verification Criteria
+## Acceptance Criteria
 
-- [ ] {Criterion 1}
-- [ ] {Criterion 2}
-- [ ] {Criterion 3}
-- [ ] {Criterion 4+}
+List each criterion the verifier will check:
+
+- **Criterion 1:** {Specific, testable description}
+- **Criterion 2:** {Specific, testable description}
+- **Criterion 3:** {Specific, testable description}
+- **Criterion 4+:** {Add more as needed}
+
+**Format guidance:** Each criterion must be:
+- Specific (not vague like "it works")
+- Testable (can be verified with concrete evidence)
+- Independent (can verify each separately)
+
+Example: "✓ API endpoint POST /users returns 201 status and user object with id field"
 
 ## Implementation
 

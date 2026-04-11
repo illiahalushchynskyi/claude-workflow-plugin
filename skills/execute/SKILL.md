@@ -17,7 +17,8 @@ execute (main session)
   ├─ Phase 2: Ask User
   ├─ Phase 3: Main Loop
   │   ├─ Phase 4: Agent(workflow:implementer) ← ISOLATED
-  │   ├─ Phase 5: Agent(workflow:verifier) ← ISOLATED
+  │   ├─ Phase 5A: Reset Verification Progress (clear previous results)
+  │   ├─ Phase 5B: Agent(workflow:verifier) ← ISOLATED (starts fresh)
   │   └─ Phase 6: Ask User (Mode 1 only)
   └─ Phase 7: Agent(workflow:finalize) ← ISOLATED
 ```
@@ -120,7 +121,27 @@ step-{N}.md shows status: verification
 5. Loop back to Phase 3
 ```
 
-### Phase 5: Dispatch Verifier
+### Phase 5A: Reset Verification Progress
+
+**BEFORE dispatching verifier, clear previous verification results:**
+
+```
+Read: .workflow/{TASK_NAME}/steps/step-{N}.md
+
+IF verification section already exists:
+  Clear it:
+  - Remove all previous verification notes
+  - Remove all previous criteria results
+  - Clear "Issues Identified" section
+  
+KEEP:
+  - Implementation section (implementer's notes)
+  - Acceptance criteria definitions
+```
+
+This ensures verifier starts fresh from the beginning of each step.
+
+### Phase 5B: Dispatch Verifier
 
 **CRITICAL:** Use Agent tool to dispatch verifier as isolated subagent.
 
@@ -145,20 +166,20 @@ You are verifying step {N} of {TASK_NAME}.
 - Previous status: {PREV_STATUS}
 
 **YOUR RESPONSIBILITY:**
-- Read step-{N}.md verification criteria
+- Read step-{N}.md acceptance criteria (start fresh)
 - Set up environment (install deps, build, etc)
 - Run all tests (must pass)
-- Manually verify each criterion in checklist
+- For EACH criterion: manually verify and mark ✓ passed or ✗ not passed
 - Update step-{N}.md status to "complete" or "needs-fix"
-- Document any issues found
-- Report detailed findings
+- Document detailed results with evidence
+- Report findings
 
 **DONE WHEN:**
 step-{N}.md shows status: complete OR needs-fix
-**AND** implementation notes section updated with verification results
+**AND** Verification section filled with all criteria results
 
 **IF needs-fix:**
-- Document exact issues in step file
+- Document exact issues and reasons
 - Implementer will see and re-work
 """
 )
@@ -259,6 +280,7 @@ Then: **WORKFLOW COMPLETE** ✓
 - ✅ Use Agent(subagent_type="general-purpose") for implementer/verifier/finalize
 - ✅ Pass context and task directory to Agent prompt
 - ✅ Instruct Agent to Invoke Skill() for their task
+- ✅ Before Phase 5B: Reset verification progress (clear previous results)
 - ✅ Wait for Agent() to return completely
 - ✅ Read step-N.md to verify status changed
 - ✅ Handle failures and ask user
