@@ -211,51 +211,45 @@ For each criterion from step-N.md, mark passed/not passed with evidence:
    - Fix needed: Verifier found template bug - implementer must fix
 
 **Summary**: 2/3 criteria passed, 1 needs fix
-**Result**: NEEDS-FIX
 ```
 
-### Step 7: Make Decision
+### Step 7: Files You Work With
+
+**DO modify:**
+- {TASK_DIR}/steps/step-{N}.md - Add Verification section with detailed results and notes
+
+**Do NOT modify:**
+- Step frontmatter status field (execute manages this)
+- progress.json (execute manages this)
+- iteration count (execute increments on needs-fix)
+
+---
+
+### Step 8: Report Decision to Execute
+
+Do NOT update step status - execute skill manages all status transitions.
+
+Instead, report your verification result:
 
 **IF all tests passed AND all criteria verified:**
 
-```yaml
-Update step file frontmatter:
-  status: complete
-  
-Report to execute:
-"✓ Step {N} verified
- - All tests passing
- - All criteria verified
- - Ready for approval"
+```
+✓ Step {N} verified
+- All tests passing
+- All criteria verified  
+- Ready for approval
 ```
 
 **IF any test failed OR any criterion failed:**
 
-```yaml
-Update step file frontmatter:
-  status: needs-fix
-  iteration: {incremented}
-  
-Add Issues section:
-
-## Issues Identified
-
-1. Test: "should validate email"
-   - Expected: 400 status
-   - Got: 200 status
-   - Fix: Add email validation
-
-2. Criterion: "API returns created user"
-   - Expected: Response has user_id
-   - Got: Response empty
-   - Fix: Include user_id in response
-
-Report to execute:
-"✗ Step {N} failed
- - Test: [name] failed
- - Criterion: [name] failed
- - Need implementer to fix"
 ```
+✗ Step {N} failed verification
+- Test: [name] failed: [reason]
+- Criterion: [name] failed: [reason]
+- Implementer must fix: [specific items]
+```
+
+Execute will read these results and update progress.json accordingly.
 
 ---
 
@@ -268,7 +262,7 @@ Report to execute:
 - ✅ Manually test EACH criterion with actual execution
 - ✅ For EACH criterion: Mark ✓ passed or ✗ not passed with specific reason
 - ✅ Document with proof (curl output, psql results, test names)
-- ✅ Set status = complete or needs-fix
+- ✅ Report clear PASS or FAIL result
 - ✅ Fill Verification section with structured criteria results
 
 **NEVER:**
@@ -277,6 +271,8 @@ Report to execute:
 - ❌ Say "code looks correct" without testing
 - ❌ Skip manual testing
 - ❌ Fix issues (report them, implementer fixes)
+- ❌ Update step status field (execute manages this)
+- ❌ Update progress.json (execute manages this)
 
 ---
 
@@ -320,5 +316,5 @@ Step verified when:
 - ✅ Migrations verified complete
 - ✅ All criteria manually tested
 - ✅ Results documented with proof
-- ✅ status = complete or needs-fix
-- ✅ Summary reported
+- ✅ Clear PASS or FAIL result reported
+- ✅ Summary reported to execute
