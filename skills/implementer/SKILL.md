@@ -17,26 +17,32 @@ DO NOT call this skill directly from main session.
 
 ## Procedure
 
-1. **Read** step definition from {TASK_DIR}/steps/step-{N}.md
+1. **Load Project Config**
+   - Read `.workflow-config.json` from task directory
+   - Extract: projectType, buildCommand, testCommand, migrateCommand
+   - Use these commands instead of hardcoded npm commands
+
+2. **Read** step definition from {TASK_DIR}/steps/step-{N}.md
    - Extract goal, criteria, files to modify
 
-2. **Implement** code changes
+3. **Implement** code changes
    - Use Edit for existing files, Write for new files
-   - Run migrations if needed: `npm run migrate`
+   - Run migrations if needed: use `${migrateCommand}` from config (if not null)
 
-3. **Test** - MANDATORY: `npm test` must pass
+4. **Test** - MANDATORY: Use `${testCommand}` from config
+   - Must pass on all test frameworks (npm test, pytest, cargo test, go test, etc.)
    - Fix code or tests until all pass
    - Document results
 
-4. **Commit** - `git commit -m "Implement step {N}: {goal}"`
+5. **Commit** - `git commit -m "Implement step {N}: {goal}"`
 
-5. **Update Implementation section** in step-{N}.md
+6. **Update Implementation section** in step-{N}.md
    - Files modified/created
    - Summary of changes
-   - Test results
+   - Test results (including which testCommand was used)
    - Do NOT update status field
 
-6. **Report** back to execute with brief summary
+7. **Report** back to execute with brief summary
 
 ## Files
 
@@ -48,10 +54,11 @@ DO NOT call this skill directly from main session.
 ## Critical
 
 **MUST:**
+- ✅ Load and use .workflow-config.json commands (not hardcoded npm)
 - ✅ Understand goal before coding
-- ✅ Run tests - all must pass
+- ✅ Run tests using testCommand from config - all must pass
 - ✅ Commit changes
-- ✅ Update Implementation section
+- ✅ Update Implementation section with command info
 - ✅ Report summary to execute
 
 **NEVER:**
