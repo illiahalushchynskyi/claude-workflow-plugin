@@ -1,9 +1,27 @@
 ---
 name: workflow:implementer
-description: Use when a workflow step is in implementation phase - executes code changes and updates step tracking
+description: SUBAGENT ONLY - Use when a workflow step is in implementation phase, dispatched via workflow:execute skill
+execution-context: subagent-only
+dispatch-via: workflow:execute
 ---
 
 # Workflow Implementer Skill
+
+⚠️ **CRITICAL: SUBAGENT ONLY - DO NOT CALL DIRECTLY**
+
+**This skill runs in isolated subagent context and MUST be dispatched by workflow:execute.**
+
+**If you are the main orchestrator:**
+- ❌ DO NOT call this skill directly
+- ✅ Call `workflow:execute` instead
+- ✅ `workflow:execute` will dispatch this skill to an isolated subagent
+
+**If you are a subagent:**
+- ✅ You were correctly dispatched by execute
+- ✅ Follow the procedure below
+- ✅ You own the implementation work
+
+---
 
 Implement a workflow step. You are a subagent dispatched by execute.
 

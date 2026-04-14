@@ -1,9 +1,27 @@
 ---
 name: workflow:verifier
-description: Use when a workflow step is ready for verification - executes builds, tests, and manual testing to prove code works
+description: SUBAGENT ONLY - Use when a workflow step is ready for verification, dispatched via workflow:execute skill
+execution-context: subagent-only
+dispatch-via: workflow:execute
 ---
 
 # Workflow Verifier Skill
+
+⚠️ **CRITICAL: SUBAGENT ONLY - DO NOT CALL DIRECTLY**
+
+**This skill runs in isolated subagent context and MUST be dispatched by workflow:execute.**
+
+**If you are the main orchestrator:**
+- ❌ DO NOT call this skill directly
+- ✅ Call `workflow:execute` instead
+- ✅ `workflow:execute` will dispatch this skill to an isolated subagent
+
+**If you are a subagent:**
+- ✅ You were correctly dispatched by execute
+- ✅ Follow the procedure below
+- ✅ You own the verification work
+
+---
 
 Verify a workflow step works. You are a subagent dispatched by execute.
 

@@ -1,9 +1,27 @@
 ---
 name: workflow:finalize
-description: Use when a workflow is approved and ready to finalize - creates completion commit and marks workflow as complete
+description: SUBAGENT ONLY - Use when a workflow is approved and ready to finalize, dispatched via workflow:execute skill
+execution-context: subagent-only
+dispatch-via: workflow:execute
 ---
 
 # Workflow Finalize Skill
+
+⚠️ **CRITICAL: SUBAGENT ONLY - DO NOT CALL DIRECTLY**
+
+**This skill runs in isolated subagent context and MUST be dispatched by workflow:execute.**
+
+**If you are the main orchestrator:**
+- ❌ DO NOT call this skill directly
+- ✅ Call `workflow:execute` instead
+- ✅ `workflow:execute` will dispatch this skill to an isolated subagent
+
+**If you are a subagent:**
+- ✅ You were correctly dispatched by execute
+- ✅ Follow the procedure below
+- ✅ You own the finalization work
+
+---
 
 Complete a workflow by creating final commit and marking it done. This skill runs in an isolated subagent.
 
