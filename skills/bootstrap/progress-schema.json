@@ -1,0 +1,37 @@
+{
+  "task_name": "feature-auth",
+  "mode": 1,
+  "created": "2026-04-14",
+  "started": "2026-04-14",
+  "current_step": 1,
+  "steps": {
+    "1": {
+      "name": "Add JWT token generation",
+      "status": "verification",
+      "iteration": 1,
+      "implementation_start": "2026-04-14T10:30:00Z",
+      "implementation_end": "2026-04-14T11:45:00Z",
+      "verification_start": "2026-04-14T11:45:00Z",
+      "verification_end": null,
+      "approval_date": null
+    },
+    "2": {
+      "name": "Add token validation middleware",
+      "status": "pending",
+      "iteration": 1,
+      "implementation_start": null,
+      "implementation_end": null,
+      "verification_start": null,
+      "verification_end": null,
+      "approval_date": null
+    }
+  },
+  "approvals": {
+    "mode_1_manual_approvals": [
+      {
+        "step": 1,
+        "approved_at": "2026-04-14T12:00:00Z"
+      }
+    ]
+  }
+}

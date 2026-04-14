@@ -176,6 +176,61 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
 }
 ```
 
+### Step 5.5: Initialize progress.json
+
+Create `.workflow/TASK_NAME/progress.json` to track detailed step execution state:
+
+```json
+{
+  "task_name": "{TASK_NAME}",
+  "mode": {1|2},
+  "created": "{TODAY}",
+  "started": null,
+  "current_step": 1,
+  "steps": {
+    "1": {
+      "name": "{Step 1 Name}",
+      "status": "pending",
+      "iteration": 1,
+      "implementation_start": null,
+      "implementation_end": null,
+      "verification_start": null,
+      "verification_end": null,
+      "approval_date": null
+    },
+    "2": {
+      "name": "{Step 2 Name}",
+      "status": "pending",
+      "iteration": 1,
+      "implementation_start": null,
+      "implementation_end": null,
+      "verification_start": null,
+      "verification_end": null,
+      "approval_date": null
+    }
+  },
+  "approvals": {
+    "mode_1_manual_approvals": []
+  }
+}
+```
+
+**Progress.json Structure:**
+- `task_name` - Task identifier
+- `mode` - Execution mode (1 for Step-by-Step, 2 for End-to-End)
+- `created` - Task creation date (YYYY-MM-DD)
+- `started` - Workflow start date (null until first step runs)
+- `current_step` - Current active step number
+- `steps` - Object tracking each step's execution state:
+  - `status` - One of: `pending`, `implementation`, `verification`, `needs-fix`, `complete`
+  - `iteration` - Current iteration number (increments on retries)
+  - `implementation_start/end` - ISO 8601 timestamps
+  - `verification_start/end` - ISO 8601 timestamps
+  - `approval_date` - ISO 8601 timestamp (Mode 1 only)
+- `approvals.mode_1_manual_approvals` - Array of manual approvals for Mode 1 workflows
+
+This file is the source of truth for detailed progress, while PLAN.md shows only completed steps.
+
 ### Step 6: Verify Files Created
 
 Check:
