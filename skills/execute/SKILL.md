@@ -37,8 +37,9 @@ Use `workflow:execute` when:
 
 1. Read `.workflow/{TASK_NAME}/PLAN.md` for mode (1 or 2)
 2. Read `.workflow/{TASK_NAME}/progress.json`
-3. Find first step with status ≠ "complete"
-4. Extract: task name, mode, next step, current status
+3. Read `.workflow/{TASK_NAME}/.workflow-config.json` - Extract: projectType, buildCommand, testCommand, migrateCommand
+4. Find first step with status ≠ "complete"
+5. Extract: task name, mode, next step, current status, and config info
 
 ### Ask User Confirmation
 
@@ -80,6 +81,9 @@ fi
 
 When a step is `pending` or `needs-fix`, dispatch implementer as subagent:
 
+1. First, load `.workflow-config.json` to get projectType, buildCommand, testCommand, migrateCommand
+2. Include this info in the subagent prompt
+
 ```python
 Agent(
   description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
@@ -97,12 +101,18 @@ You are implementing step {N} of {TASK_NAME}.
 - Step: {N} ({STEP_NAME})
 - Task directory: {TASK_DIR_PATH}
 - Mode: {MODE} (1=step-by-step, 2=continuous)
+- Project Type: {PROJECT_TYPE}
+- Build command: {BUILD_COMMAND}
+- Test command: {TEST_COMMAND}
+- Migrate command: {MIGRATE_COMMAND}
 
 **DONE WHEN:**
 step-{N}.md shows status: verification
 """
 )
 ```
+
+The skill will load .workflow-config.json and use these commands for building, testing, and migrations.
 
 **After implementer returns:**
 1. Read: `.workflow/{TASK_NAME}/steps/step-{N}.md`
@@ -113,6 +123,9 @@ step-{N}.md shows status: verification
 ### Dispatch Verifier (Subagent)
 
 When a step is in `verification` status, dispatch verifier as subagent:
+
+1. First, load `.workflow-config.json` to get projectType, buildCommand, testCommand, migrateCommand
+2. Include this info in the subagent prompt
 
 ```python
 Agent(
@@ -131,12 +144,18 @@ You are verifying step {N} of {TASK_NAME}.
 - Step: {N} ({STEP_NAME})
 - Task directory: {TASK_DIR_PATH}
 - Mode: {MODE} (1=step-by-step, 2=continuous)
+- Project Type: {PROJECT_TYPE}
+- Build command: {BUILD_COMMAND}
+- Test command: {TEST_COMMAND}
+- Migrate command: {MIGRATE_COMMAND}
 
 **DONE WHEN:**
 step-{N}.md shows status: complete OR needs-fix
 """
 )
 ```
+
+The skill will load .workflow-config.json and use these commands for building, testing, and migrations.
 
 **After verifier returns:**
 1. Read: `.workflow/{TASK_NAME}/steps/step-{N}.md`
@@ -190,6 +209,7 @@ When dispatching implementer:
 - Use `Agent(subagent_type="general-purpose")`
 - Never use `Skill(skill: "workflow:implementer")` directly
 - Include full step context in prompt
+- Include projectType, buildCommand, testCommand, migrateCommand from .workflow-config.json
 - Subagent updates step status to `verification` when complete
 - You verify status changed before proceeding
 
@@ -199,6 +219,7 @@ When dispatching verifier:
 - Use `Agent(subagent_type="general-purpose")`
 - Never use `Skill(skill: "workflow:verifier")` directly
 - Include full step context in prompt
+- Include projectType, buildCommand, testCommand, migrateCommand from .workflow-config.json
 - Subagent updates step status to `complete` or `needs-fix`
 - You verify status changed before proceeding
 
@@ -215,10 +236,11 @@ When all steps complete:
 ## Critical Rules
 
 **MUST DO:**
-- ✅ Read PLAN.md and progress.json first
+- ✅ Read PLAN.md, progress.json, and .workflow-config.json first
+- ✅ Extract projectType, buildCommand, testCommand, migrateCommand from config
 - ✅ Ask user via AskUserQuestion before dispatching first Agent()
 - ✅ Use Agent(subagent_type="general-purpose") for implementer and verifier
-- ✅ Include task context and step directory in Agent prompt
+- ✅ Include task context, step directory, AND project config info in Agent prompt
 - ✅ Instruct Agent to `Invoke: Skill(skill: "workflow:...")`
 - ✅ Wait for Agent() to return completely
 - ✅ Read step-N.md to verify status changed
