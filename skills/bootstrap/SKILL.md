@@ -72,36 +72,103 @@ Create `.workflow/TASK_NAME/PLAN.md`:
 
 ```yaml
 ---
-name: {TASK_NAME}
-title: {Task Title}
-description: {Description}
-mode: {1|2}
-status: planning
-created: {TODAY}
+status: bootstrap
+mode: {MODE}
+created: $(date -u +%Y-%m-%d)
 started: null
 completed: null
+completed_steps: 0
 ---
 
 # {Task Title}
 
 {Description}
 
-## Steps Overview
+## Progress
 
-| Step | Name | Status | Iteration | Acceptance Criteria | Notes |
-|------|------|--------|-----------|-------------------|-------|
-| 1 | {Step 1 Name} | pending | 1 | See step-1.md | Initial |
-| 2 | {Step 2 Name} | pending | 1 | See step-2.md | Initial |
-| ... | ... | ... | ... | ... | ... |
-| N | {Step N Name} | pending | 1 | See step-N.md | Initial |
+Completed Steps: 0/{TOTAL_STEPS}
 
-## Execution Notes
+[No steps completed yet]
 
-- Mode: {1=Step-by-Step|2=End-to-End}
-- Status: {planning|executing|ready-for-review|approved|complete}
+## Next Steps
 
-**Note:** Acceptance Criteria column references the detailed criteria in each step file. Verifier uses these criteria to mark each as ✓ passed or ✗ not passed.
+Step 1: {Step 1 Name}
 ```
+
+## PLAN.md Structure
+
+PLAN.md is the **human-facing summary** of the workflow. It shows:
+- Overall workflow metadata (mode, dates, status)
+- Which steps have been completed and approved
+- Final results
+
+All active step tracking happens in **progress.json** (system state).
+
+### PLAN.md Content (Completed Steps Only)
+
+When workflow is running, PLAN.md shows:
+
+```yaml
+---
+status: in-progress  # bootstrap|in-progress|ready-for-review|approved|complete
+mode: 1  # 1=step-by-step|2=end-to-end
+created: 2026-04-14
+started: 2026-04-14
+completed: null  # Set when finalize runs
+completed_steps: 2  # Number of steps marked complete
+---
+
+# Feature: {Task Name}
+
+{Description of what's being built}
+
+## Progress
+
+Completed Steps: 2/{TOTAL}
+
+✓ Step 1: {Name} (completed 2026-04-14)
+✓ Step 2: {Name} (completed 2026-04-14)
+⊙ Step 3: In Progress...
+
+## Next Steps
+
+{What's being worked on next}
+```
+
+### Why Separate progress.json?
+
+- **PLAN.md**: Human-readable, reflects approved changes only
+- **progress.json**: System state, tracks all transitions (pending → implementation → verification → needs-fix → complete)
+- **execute skill**: Single source of truth, manages all state transitions
+- **implementer/verifier**: Report results, don't manage state
+
+This separation ensures:
+- Humans see a clean, accurate view of progress
+- System never gets out of sync
+- Easy to pause/resume workflows
+- Clear audit trail of what was approved
+
+### PLAN.md Initialization
+
+When bootstrap creates PLAN.md, it initializes with:
+
+```yaml
+---
+status: bootstrap
+mode: {MODE}
+created: $(date -u +%Y-%m-%d)
+started: null
+completed: null
+completed_steps: 0
+---
+```
+
+The status field transitions:
+- `bootstrap` - Just created
+- `in-progress` - execute has started running steps
+- `ready-for-review` - All steps complete, awaiting human final approval
+- `approved` - Human approved, ready for finalize
+- `complete` - finalize has run
 
 ### Step 4: Generate step-N.md Files
 
@@ -361,6 +428,28 @@ jq -n \
 - This file is updated by workflow:execute, workflow:implementer, and workflow:verifier agents
 - PLAN.md shows only the completed/current state; progress.json shows full history
 
+### Step 5.6: Two Files, One Workflow
+
+Bootstrap creates two key files that work together:
+
+1. **PLAN.md** (human-facing)
+   - Shows completed steps and overall progress
+   - Updated by execute after each step completes AND is approved
+   - Only reflects approved changes
+   - Status transitions: bootstrap → in-progress → ready-for-review → approved → complete
+
+2. **progress.json** (system state)
+   - Tracks ALL step transitions: pending → implementation → verification → needs-fix → complete
+   - Updated by execute continuously as work progresses
+   - Single source of truth for what's being worked on
+   - Contains detailed timing and iteration history
+
+Both work together:
+- User sees clean progress in PLAN.md
+- System maintains detailed state in progress.json
+- Execute orchestrates all transitions
+- Verifier reports results to execute, not directly to PLAN.md
+
 ### Step 6: Verify Files Created
 
 Check:
@@ -379,8 +468,8 @@ Check:
 Show:
 - Task structure created with workflow directory
 - Files generated:
-  - ✓ PLAN.md created
-  - ✓ progress.json initialized
+  - ✓ PLAN.md (workflow metadata and completed steps)
+  - ✓ progress.json (detailed state tracking for all transitions)
   - ✓ step-*.md files created
   - ✓ .workflow-config.json created
 - All steps initialized to pending status
@@ -392,8 +481,8 @@ Show:
 ✅ Workflow initialized: {TASK_NAME}
 
 Files created:
-  ✓ .workflow/{TASK_NAME}/PLAN.md
-  ✓ .workflow/{TASK_NAME}/progress.json (all steps pending)
+  ✓ .workflow/{TASK_NAME}/PLAN.md (human-facing progress)
+  ✓ .workflow/{TASK_NAME}/progress.json (system state tracking)
   ✓ .workflow/{TASK_NAME}/steps/step-1.md
   ✓ .workflow/{TASK_NAME}/steps/step-2.md
   ...
