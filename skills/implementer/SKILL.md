@@ -180,7 +180,7 @@ Status is managed by execute, not reported here.
 **DO NOT modify:**
 - Step frontmatter status field (execute manages this)
 - progress.json (execute manages this)
-- PLAN.md (except updater)
+- PLAN.md (execute manages this)
 - Other step files (only current step)
 
 ---

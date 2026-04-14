@@ -354,6 +354,7 @@ For each criterion from step-N.md, mark passed/not passed with evidence:
 - Step frontmatter status field (execute manages this)
 - progress.json (execute manages this)
 - iteration count (execute increments on needs-fix)
+- PLAN.md (execute manages this)
 
 ---
 
