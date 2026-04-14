@@ -91,46 +91,46 @@ Include in message:
 - If migrations were run
 ```
 
-### Step 5: Update Step File
+### Step 5: Update Step File (Implementation Section Only)
 
-Edit {TASK_DIR}/steps/step-{N}.md:
+**Do NOT update step status** - execute skill manages all status transitions.
 
-```yaml
----
-status: verification
-iteration: {SAME or INCREMENTED}
----
+Only update the Implementation section with your work:
 
+Update {TASK_DIR}/steps/step-{N}.md **Implementation section only**:
+
+```markdown
 ## Implementation
 
-### Files Modified/Created
-- file1.ts
-- file2.ts
-- migrations/001_add_users.sql
+### Files to Modify/Create
+- [List actual files created/modified]
 
 ### Implementation Notes
 
 **Implementer**: Claude - {DATE}
-- Created [feature] using [approach]
-- Ran migrations: [yes/no]
-- Tests passing: [count/total]
-- [Any notes for verifier]
+- [Summary of changes made]
+- [Any architectural decisions]
+- [Test results: X tests passing]
+- [Anything noteworthy for verifier]
 ```
+
+Do NOT modify frontmatter - execute skill updates status.
 
 ### Step 6: Report Back
 
-Return to execute with brief summary (under 100 words):
+Return to execute with brief summary:
 
 ```
-✓ Step {N} complete
-- Implemented {goal}
+✓ Step {N} implementation complete
+- Implemented [feature description]
 - Files: {count} created, {count} modified
 - Migrations: {yes/no}
-- Tests: {count} passing
-- Status: verification
+- Tests: {count}/{total} passing
 
 Ready for verification.
 ```
+
+Status is managed by execute, not reported here.
 
 ---
 
@@ -175,9 +175,11 @@ Ready for verification.
 **Write/Edit:**
 - Project source files
 - Migration files
-- {TASK_DIR}/steps/step-{N}.md (update Implementation section + status)
+- {TASK_DIR}/steps/step-{N}.md (update Implementation section ONLY)
 
 **DO NOT modify:**
+- Step frontmatter status field (execute manages this)
+- progress.json (execute manages this)
 - PLAN.md (except updater)
 - Other step files (only current step)
 
@@ -191,14 +193,15 @@ Ready for verification.
 - ✅ Run `npm test` - all must pass
 - ✅ If ORM models changed: run migrations
 - ✅ Commit changes with clear message
-- ✅ Update step file: status = "verification"
-- ✅ Fill Implementation section
+- ✅ Update step file: Implementation section only
+- ✅ Fill Implementation section with details
 - ✅ Return brief summary
 
 **NEVER:**
 - ❌ Skip tests
 - ❌ Skip migrations if needed
-- ❌ Leave step file unchanged
+- ❌ Update step status field (execute manages this)
+- ❌ Update progress.json (execute manages this)
 - ❌ Report done if tests fail
 - ❌ Commit broken code
 
@@ -211,6 +214,6 @@ Step complete when:
 - ✅ Tests passing (100%)
 - ✅ Migrations ran (if needed)
 - ✅ Changes committed
-- ✅ step-N.md status = "verification"
-- ✅ Implementation section filled
-- ✅ Summary reported
+- ✅ Implementation section updated
+- ✅ Changes committed to git
+- ✅ Ready for verification
