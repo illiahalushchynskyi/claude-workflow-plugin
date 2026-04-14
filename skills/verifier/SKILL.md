@@ -62,6 +62,138 @@ If Docker fails:
   → Report to implementer
 ```
 
+### Step 2B: Verify Docker Setup (if docker-compose.yml exists)
+
+If project uses Docker (has docker-compose.yml):
+
+**1. Check docker-compose.yml exists and is valid:**
+
+```bash
+if [ ! -f "docker-compose.yml" ]; then
+  echo "⊘ Project does not use Docker (docker-compose.yml not found)"
+  # Skip to next step
+else
+  docker-compose config > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    # FAIL: docker-compose.yml is invalid
+    docker-compose config  # Show the error
+    # Report error to implementer
+  else
+    echo "✓ docker-compose.yml is valid"
+  fi
+fi
+```
+
+**2. Start all containers:**
+
+```bash
+echo "Starting Docker containers..."
+docker-compose up -d
+
+if [ $? -ne 0 ]; then
+  # FAIL: docker-compose up failed
+  docker-compose logs
+  # Stop verification
+fi
+
+echo "Waiting for containers to stabilize..."
+sleep 5
+```
+
+**3. Verify ALL containers are running:**
+
+```bash
+echo "Checking container status..."
+
+# Get list of services defined in docker-compose.yml
+SERVICES=$(docker-compose config --services)
+echo "Expected services: $SERVICES"
+
+# Get list of currently running containers
+RUNNING=$(docker-compose ps --services --filter "status=running")
+echo "Running services: $RUNNING"
+
+# Check each service is running
+for service in $SERVICES; do
+  if ! echo "$RUNNING" | grep -q "^${service}$"; then
+    echo "✗ Container '$service' is NOT running"
+    docker-compose ps  # Show full status
+    docker-compose logs "$service" --tail=20  # Show last 20 lines of logs
+    # FAIL: Service "$service" failed to start
+    docker-compose down
+    # Stop verification
+  else
+    echo "✓ Container '$service' is running"
+  fi
+done
+
+echo "✓ All required containers are running"
+```
+
+**4. Verify no container has exited with error:**
+
+```bash
+echo "Checking for exited containers..."
+
+# Check for any containers in Exit or Exited state
+EXITED=$(docker-compose ps | grep -E "Exit|Exited" | wc -l)
+
+if [ "$EXITED" -gt 0 ]; then
+  echo "✗ Some containers have exited with errors:"
+  docker-compose ps | grep -E "Exit|Exited"
+  echo ""
+  echo "Container logs:"
+  docker-compose logs --tail=50
+  # FAIL: One or more containers exited with errors
+  docker-compose down
+  # Stop verification
+fi
+
+echo "✓ No containers have exited with errors"
+```
+
+**5. Verify service health (optional but recommended):**
+
+```bash
+# If your docker-compose.yml has healthchecks, verify them
+if docker-compose ps --filter "status=healthy" | grep -q .; then
+  echo "Checking healthchecks..."
+  UNHEALTHY=$(docker-compose ps --filter "status=unhealthy" | wc -l)
+  if [ "$UNHEALTHY" -gt 0 ]; then
+    echo "⚠ Some services show unhealthy status (may be normal if still starting)"
+    docker-compose ps
+  else
+    echo "✓ All services report healthy status"
+  fi
+fi
+```
+
+**6. Clean up after verification:**
+
+```bash
+echo "Cleaning up Docker environment..."
+docker-compose down
+
+if [ $? -ne 0 ]; then
+  echo "⚠ Warning: docker-compose down failed"
+  # Don't FAIL here, just warn
+else
+  echo "✓ Docker containers cleaned up"
+fi
+```
+
+**Document results in step file:**
+
+```markdown
+**Docker Verification:**
+- ✓ docker-compose.yml is valid
+- ✓ All {N} services started successfully
+  - Service 1: [name]
+  - Service 2: [name]
+- ✓ No containers exited with errors
+- ✓ All containers cleaned up after verification
+```
+
 ### Step 3: Verify Migrations (Check only, don't run)
 
 ```
@@ -259,6 +391,8 @@ Execute will read these results and update progress.json accordingly.
 - ✅ Build project - fail if errors
 - ✅ Run all tests - fail if any fail
 - ✅ Check migrations ran (don't run them)
+- ✅ If docker-compose.yml exists: verify ALL containers running
+- ✅ If docker-compose.yml exists: verify NO containers exited
 - ✅ Manually test EACH criterion with actual execution
 - ✅ For EACH criterion: Mark ✓ passed or ✗ not passed with specific reason
 - ✅ Document with proof (curl output, psql results, test names)
@@ -270,6 +404,7 @@ Execute will read these results and update progress.json accordingly.
 - ❌ Assume tests passed without running
 - ❌ Say "code looks correct" without testing
 - ❌ Skip manual testing
+- ❌ Skip docker-compose validation if it exists
 - ❌ Fix issues (report them, implementer fixes)
 - ❌ Update step status field (execute manages this)
 - ❌ Update progress.json (execute manages this)
@@ -285,13 +420,23 @@ Execute will read these results and update progress.json accordingly.
 - ✓ API tested: curl output shows correct status/data
 - ✓ Database: psql query shows data persisted
 - ✓ Page: curl output shows expected content
-- ✓ Docker: docker-compose ps shows all UP
+
+**Docker verification:**
+- ✓ docker-compose config command succeeded (valid YAML)
+- ✓ docker-compose ps shows all services with "Up" status (not "Exit" or "Exited")
+- ✓ All services from config --services are listed in ps output
+- ✓ No containers show exit codes or "Exited" status
+- ✓ docker-compose down succeeded (cleanup)
 
 **NOT proof:**
 - ✗ "Code looks correct"
 - ✗ "Should work"
 - ✗ "API probably responds"
 - ✗ "Tests should pass"
+- ✗ "Docker is running"
+- ✗ "Containers started"
+- ✗ "docker-compose up succeeded" (without checking all services)
+- ✗ "Some containers running" (what about the others?)
 
 ---
 
