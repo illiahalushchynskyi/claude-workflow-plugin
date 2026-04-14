@@ -99,12 +99,11 @@ Step 1: {Step 1 Name}
 
 PLAN.md is the **human-facing summary** of the workflow. It shows:
 - Overall workflow metadata (mode, dates, status)
-- Which steps have been completed and approved
-- Final results
+- General task information
 
-All active step tracking happens in **progress.json** (system state).
+All progress tracking details happen in **progress.json** (system state).
 
-### PLAN.md Content (Completed Steps Only)
+### PLAN.md Content (Minimal, Status Only)
 
 When workflow is running, PLAN.md shows:
 
@@ -115,42 +114,35 @@ mode: 1  # 1=step-by-step|2=end-to-end
 created: 2026-04-14
 started: 2026-04-14
 completed: null  # Set when finalize runs
-completed_steps: 2  # Number of steps marked complete
 ---
 
 # Feature: {Task Name}
 
 {Description of what's being built}
-
-## Progress
-
-Completed Steps: 2/{TOTAL}
-
-✓ Step 1: {Name} (completed 2026-04-14)
-✓ Step 2: {Name} (completed 2026-04-14)
-⊙ Step 3: In Progress...
-
-## Next Steps
-
-{What's being worked on next}
 ```
+
+For progress details, see `progress.json` which tracks:
+- Each step's status (pending|implementation|verification|needs-fix|complete)
+- Timestamps for all phases
+- Iteration counts
+- Approval dates
 
 ### Why Separate progress.json?
 
-- **PLAN.md**: Human-readable, reflects approved changes only
-- **progress.json**: System state, tracks all transitions (pending → implementation → verification → needs-fix → complete)
+- **PLAN.md**: Minimal human-facing summary (just status and dates)
+- **progress.json**: Complete system state with all step details and transitions
 - **execute skill**: Single source of truth, manages all state transitions
 - **implementer/verifier**: Report results, don't manage state
 
 This separation ensures:
-- Humans see a clean, accurate view of progress
+- PLAN.md stays simple and readable
+- progress.json has complete audit trail with timestamps and iterations
 - System never gets out of sync
 - Easy to pause/resume workflows
-- Clear audit trail of what was approved
 
 ### PLAN.md Initialization
 
-When bootstrap creates PLAN.md, it initializes with:
+When bootstrap creates PLAN.md, it initializes with ONLY status and dates:
 
 ```yaml
 ---
@@ -159,9 +151,15 @@ mode: {MODE}
 created: $(date -u +%Y-%m-%d)
 started: null
 completed: null
-completed_steps: 0
 ---
+
+# {Task Title}
+
+{Task description}
 ```
+
+**NOTE:** Do NOT add step lists or progress counters to PLAN.md.
+All step tracking goes in progress.json.
 
 The status field transitions:
 - `bootstrap` - Just created

@@ -172,7 +172,7 @@ Then continue with updating PLAN.md as before.
 
 ### Step 5: Update PLAN.md
 
-Edit PLAN.md:
+Edit PLAN.md - update status and completed date ONLY:
 
 ```yaml
 ---
@@ -180,19 +180,15 @@ status: complete
 completed: {TODAY}
 ---
 
-## Completion
+# {Task Title}
 
-Workflow completed successfully on {DATE}.
+{Task description}
 
-All steps verified:
-- Step 1: ✓ complete
-- Step 2: ✓ complete
-- ...
-- Step N: ✓ complete
-
-Total iterations: {count}
-Workflow time: {created} to {completed}
+Workflow completed on {DATE}. See progress.json for detailed step tracking.
 ```
+
+**NOTE:** Do NOT add step lists or iteration counts to PLAN.md.
+All details are in progress.json.
 
 ### Step 6: Final Commit
 

@@ -424,12 +424,14 @@ AND final commit exists in git log
 )
 ```
 
-After finalize completes, progress.json will have:
-- All steps: status = "complete"
-- PLAN.md updated with completed steps
-- Final commit created with comprehensive summary
+After finalize completes:
+- progress.json: All steps marked complete with timestamps
+- PLAN.md: status = "complete", completed date set
+- Final commit created with comprehensive summary (from progress.json)
 
 Then: **WORKFLOW COMPLETE** ✓
+
+**NOTE:** All step details remain in progress.json. PLAN.md contains only status.
 
 **IF "No, review more":**
 - Loop back to Phase 3 (allow re-work of any step)
