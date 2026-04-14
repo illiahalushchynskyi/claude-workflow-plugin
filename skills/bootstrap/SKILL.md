@@ -178,7 +178,128 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
 
 ### Step 5.5: Initialize progress.json
 
-Create `.workflow/TASK_NAME/progress.json` to track detailed step execution state:
+Create `.workflow/TASK_NAME/progress.json` to track detailed step execution state.
+
+**Purpose:** progress.json is the source of truth for detailed step execution, timing, and approvals. While PLAN.md shows high-level status, progress.json tracks timestamps and iteration history.
+
+**Before:**
+```
+No progress tracking file - workflow cannot track timing or iterative attempts
+```
+
+**After:**
+```
+.workflow/TASK_NAME/progress.json created with all steps in pending status
+- Task initialized with creation date
+- All steps ready for execution tracking
+- Mode-specific approval structure initialized
+```
+
+**Implementation:**
+
+Use this bash command to create progress.json. Build the steps object from the step files you just created:
+
+```bash
+# Build steps object from step files
+STEPS_JSON="{"
+for i in .workflow/TASK_NAME/steps/step-*.md; do
+  if [ -f "$i" ]; then
+    # Extract step number from filename (step-1.md -> 1)
+    STEP_NUM=$(basename "$i" | sed 's/step-\([0-9]*\)\.md/\1/')
+    # Extract step name from frontmatter
+    STEP_NAME=$(grep "^name:" "$i" | head -1 | sed 's/^name: //' | sed "s/'//g" | sed 's/"//g')
+    
+    # Add to steps object
+    if [ "$STEP_NUM" != "1" ]; then
+      STEPS_JSON="$STEPS_JSON,"
+    fi
+    STEPS_JSON="$STEPS_JSON
+    \"$STEP_NUM\": {
+      \"name\": \"$STEP_NAME\",
+      \"status\": \"pending\",
+      \"iteration\": 1,
+      \"implementation_start\": null,
+      \"implementation_end\": null,
+      \"verification_start\": null,
+      \"verification_end\": null,
+      \"approval_date\": null
+    }"
+  fi
+done
+STEPS_JSON="$STEPS_JSON
+  }"
+
+# Create progress.json
+cat > .workflow/TASK_NAME/progress.json << 'PROGRESS_EOF'
+{
+  "task_name": "{TASK_NAME}",
+  "mode": {MODE},
+  "created": "$(date -u +%Y-%m-%d)",
+  "started": null,
+  "current_step": 1,
+  "steps": STEPS_JSON_PLACEHOLDER,
+  "approvals": {
+    "mode_1_manual_approvals": []
+  }
+}
+PROGRESS_EOF
+```
+
+**Alternative: Using jq for cleaner JSON generation:**
+
+```bash
+# Collect step names into array
+STEP_NAMES=()
+for i in .workflow/TASK_NAME/steps/step-*.md; do
+  if [ -f "$i" ]; then
+    STEP_NAME=$(grep "^name:" "$i" | head -1 | sed 's/^name: //' | sed "s/'//g" | sed 's/"//g')
+    STEP_NAMES+=("$STEP_NAME")
+  fi
+done
+
+# Create steps object with jq
+STEPS_OBJ=$(
+  jq -n \
+    --argjson step_names "$(printf '%s\n' "${STEP_NAMES[@]}" | jq -R . | jq -s .)" \
+    '
+    $step_names | to_entries | map(
+      {
+        key: (.key + 1 | tostring),
+        value: {
+          name: .value,
+          status: "pending",
+          iteration: 1,
+          implementation_start: null,
+          implementation_end: null,
+          verification_start: null,
+          verification_end: null,
+          approval_date: null
+        }
+      }
+    ) | from_entries
+    '
+)
+
+# Create complete progress.json
+jq -n \
+  --arg task_name "{TASK_NAME}" \
+  --arg mode "{MODE}" \
+  --arg created "$(date -u +%Y-%m-%d)" \
+  --argjson steps "$STEPS_OBJ" \
+  '{
+    task_name: $task_name,
+    mode: ($mode | tonumber),
+    created: $created,
+    started: null,
+    current_step: 1,
+    steps: $steps,
+    approvals: {
+      mode_1_manual_approvals: []
+    }
+  }' > .workflow/TASK_NAME/progress.json
+```
+
+**File Structure Reference:**
 
 ```json
 {
@@ -215,37 +336,75 @@ Create `.workflow/TASK_NAME/progress.json` to track detailed step execution stat
 }
 ```
 
-**Progress.json Structure:**
-- `task_name` - Task identifier
-- `mode` - Execution mode (1 for Step-by-Step, 2 for End-to-End)
-- `created` - Task creation date (YYYY-MM-DD)
-- `started` - Workflow start date (null until first step runs)
-- `current_step` - Current active step number
-- `steps` - Object tracking each step's execution state:
-  - `status` - One of: `pending`, `implementation`, `verification`, `needs-fix`, `complete`
-  - `iteration` - Current iteration number (increments on retries)
-  - `implementation_start/end` - ISO 8601 timestamps
-  - `verification_start/end` - ISO 8601 timestamps
-  - `approval_date` - ISO 8601 timestamp (Mode 1 only)
-- `approvals.mode_1_manual_approvals` - Array of manual approvals for Mode 1 workflows
+**Field Definitions:**
+- `task_name` (string) - Task identifier, matches directory name
+- `mode` (number) - Execution mode: 1 for Step-by-Step (manual approval), 2 for End-to-End (automated)
+- `created` (string) - Task creation date in YYYY-MM-DD format
+- `started` (string|null) - Workflow execution start date, null until first step begins
+- `current_step` (number) - Currently active step number
+- `steps` (object) - Tracks each step's execution state:
+  - `name` (string) - Step name from step-N.md frontmatter
+  - `status` (string) - One of: `pending`, `implementation`, `verification`, `needs-fix`, `complete`
+  - `iteration` (number) - Current iteration number (increments when step is retried)
+  - `implementation_start` (string|null) - ISO 8601 timestamp when implementer started
+  - `implementation_end` (string|null) - ISO 8601 timestamp when implementer finished
+  - `verification_start` (string|null) - ISO 8601 timestamp when verifier started
+  - `verification_end` (string|null) - ISO 8601 timestamp when verification completed
+  - `approval_date` (string|null) - ISO 8601 timestamp when manually approved (Mode 1 only)
+- `approvals.mode_1_manual_approvals` (array) - History of user approvals for Mode 1 workflows, each entry includes step number and approval timestamp
 
-This file is the source of truth for detailed progress, while PLAN.md shows only completed steps.
+**Key Points:**
+- All steps initialized to `pending` status with iteration 1
+- All timestamps are null at initialization (populated during execution)
+- `current_step` always points to the step being worked on
+- For Mode 1 workflows, manual approvals are recorded in the approvals array
+- This file is updated by workflow:execute, workflow:implementer, and workflow:verifier agents
+- PLAN.md shows only the completed/current state; progress.json shows full history
 
 ### Step 6: Verify Files Created
 
 Check:
-- [ ] PLAN.md exists and is valid YAML
-- [ ] All step-N.md files exist
-- [ ] All files have correct structure
-- [ ] Status fields are correct
+- [ ] PLAN.md exists and is valid YAML with all required fields
+- [ ] All step-N.md files exist (step-1.md through step-N.md)
+- [ ] All step files have correct YAML frontmatter and content structure
+- [ ] PLAN.md status fields are correct (should show "pending" for all steps)
+- [ ] progress.json exists and is valid JSON
+- [ ] progress.json has all steps initialized to "pending" status
+- [ ] progress.json started field is null, created field has today's date
+- [ ] progress.json mode matches the specified mode (1 or 2)
+- [ ] .workflow-config.json exists with correct project metadata
 
 ### Step 7: Report to User
 
 Show:
-- Task structure created
-- All files generated
+- Task structure created with workflow directory
+- Files generated:
+  - ✓ PLAN.md created
+  - ✓ progress.json initialized
+  - ✓ step-*.md files created
+  - ✓ .workflow-config.json created
+- All steps initialized to pending status
 - Ready for execution message
 - Next step: `/workflow:execute`
+
+**Sample Output:**
+```
+✅ Workflow initialized: {TASK_NAME}
+
+Files created:
+  ✓ .workflow/{TASK_NAME}/PLAN.md
+  ✓ .workflow/{TASK_NAME}/progress.json (all steps pending)
+  ✓ .workflow/{TASK_NAME}/steps/step-1.md
+  ✓ .workflow/{TASK_NAME}/steps/step-2.md
+  ...
+  ✓ .workflow/{TASK_NAME}/steps/step-N.md
+  ✓ .workflow/{TASK_NAME}/.workflow-config.json
+
+Status: Ready to execute
+Mode: {1=Step-by-Step with approval|2=End-to-End automated}
+
+Next: Use /workflow:execute to begin implementation
+```
 
 ## Example
 
