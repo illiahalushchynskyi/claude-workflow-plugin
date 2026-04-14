@@ -22,7 +22,7 @@ DO NOT call this skill directly from main session.
 ### 1. Load Project Config
 
 Read `.workflow-config.json` from task directory. Extract:
-- `projectType` - Language/framework (node, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
+- `projectType` - Language/framework (node, php, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
 - `buildCommand` - Command to build (e.g., `cargo build`, `go build`, `python setup.py build`)
 - `testCommand` - Command to run tests (e.g., `pytest`, `cargo test`, `go test ./...`)
 - `migrateCommand` - Migration command if applicable (else null)
@@ -42,6 +42,7 @@ Fail immediately if build errors. Handle language-specific failures (e.g., compi
 
 Example commands by language:
 - **Node:** `npm install` → `npm run build`
+- **PHP:** `composer install` → (build often not needed)
 - **Python:** `pip install -e .` → `python setup.py build`
 - **Rust:** (auto) → `cargo build --release`
 - **Go:** `go mod download` → `go build ./...`
@@ -86,6 +87,7 @@ Run: `${testCommand}` from config
 
 Language-specific test output handling:
 - **Node/npm:** Exit code 0, "passed" in output
+- **PHP/phpunit:** Exit code 0, "OK" or "passed" in output
 - **Python/pytest:** Exit code 0, "passed" in output
 - **Rust/cargo:** Exit code 0, "test result:" line
 - **Go:** Exit code 0, "ok" in output

@@ -117,6 +117,19 @@ cpp-cmake:
   migration_frameworks:
     - null  # C/C++ typically doesn't use migrations
 
+# PHP
+php:
+  detect_files:
+    - composer.json
+  build: composer install
+  test: phpunit
+  install: composer install
+  migrate: null
+  migration_frameworks:
+    - php artisan migrate
+    - doctrine:migrations:migrate
+    - migrations/
+
 # Generic (if only Makefile found)
 generic-make:
   detect_files:

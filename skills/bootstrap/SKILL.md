@@ -145,15 +145,16 @@ Example: "✓ API endpoint POST /users returns 201 status and user object with i
 **Detect project language/build system** by checking for these files (in order):
 
 1. `package.json` → `node`
-2. `pyproject.toml` or `requirements.txt` → `python`
-3. `Cargo.toml` → `rust`
-4. `go.mod` → `go`
-5. `pom.xml` → `java-maven`
-6. `build.gradle` or `build.gradle.kts` → `java-gradle`
-7. `Gemfile` → `ruby`
-8. `CMakeLists.txt` → `cpp-cmake`
-9. `Makefile` → `generic-make`
-10. If none found → `other` (ask user for build/test commands)
+2. `composer.json` → `php`
+3. `pyproject.toml` or `requirements.txt` → `python`
+4. `Cargo.toml` → `rust`
+5. `go.mod` → `go`
+6. `pom.xml` → `java-maven`
+7. `build.gradle` or `build.gradle.kts` → `java-gradle`
+8. `Gemfile` → `ruby`
+9. `CMakeLists.txt` → `cpp-cmake`
+10. `Makefile` → `generic-make`
+11. If none found → `other` (ask user for build/test commands)
 
 **Detect migration framework** (if applicable) by checking for:
 - Node.js: `knex.js`, `sequelize`, `typeorm` migrations directories
@@ -185,7 +186,7 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
 ```
 
 **Field Definitions:**
-- `projectType` (string) - Detected or user-specified language/framework (node, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
+- `projectType` (string) - Detected or user-specified language/framework (node, php, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
 - `buildCommand` (string) - Command to build the project (e.g., `npm run build`, `cargo build --release`)
 - `testCommand` (string) - Command to run tests (e.g., `npm test`, `pytest`)
 - `migrateCommand` (string|null) - Command to run migrations, if applicable (e.g., `npm run migrate`, `sqlx migrate run`)
