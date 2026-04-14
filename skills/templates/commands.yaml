@@ -1,0 +1,95 @@
+# Language-specific build, test, and installation commands
+# Used by workflow system to support multi-language projects
+
+# Node.js / JavaScript / TypeScript
+node:
+  detect_files:
+    - package.json
+  build: npm run build
+  test: npm test
+  install: npm install
+  migrate: null
+
+# Python
+python:
+  detect_files:
+    - requirements.txt
+    - pyproject.toml
+    - setup.py
+  build: pip install -e .
+  test: pytest
+  install: pip install -r requirements.txt
+  migrate: null
+
+# Rust
+rust:
+  detect_files:
+    - Cargo.toml
+  build: cargo build --release
+  test: cargo test
+  install: cargo build
+  migrate: null
+
+# Go
+go:
+  detect_files:
+    - go.mod
+  build: go build ./...
+  test: go test ./...
+  install: go mod download
+  migrate: null
+
+# Java (Maven)
+java-maven:
+  detect_files:
+    - pom.xml
+  build: mvn clean compile
+  test: mvn test
+  install: mvn install
+  migrate: null
+
+# Java (Gradle)
+java-gradle:
+  detect_files:
+    - build.gradle
+    - build.gradle.kts
+  build: gradle build
+  test: gradle test
+  install: gradle build
+  migrate: null
+
+# Ruby
+ruby:
+  detect_files:
+    - Gemfile
+  build: bundle install
+  test: rspec
+  install: bundle install
+  migrate: null
+
+# C/C++ (Make)
+cpp-make:
+  detect_files:
+    - Makefile
+  build: make
+  test: make test
+  install: make
+  migrate: null
+
+# C/C++ (CMake)
+cpp-cmake:
+  detect_files:
+    - CMakeLists.txt
+  build: cmake --build .
+  test: ctest
+  install: cmake --build . --target install
+  migrate: null
+
+# Generic (if only Makefile found)
+generic-make:
+  detect_files:
+    - Makefile
+  build: make
+  test: make test
+  install: make
+  migrate: null
