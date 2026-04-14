@@ -38,6 +38,7 @@ Use this skill when:
 From execute's Agent() prompt:
 - Task name
 - PLAN.md path
+- progress.json path
 - Step files path
 
 ## Output
@@ -50,32 +51,61 @@ From execute's Agent() prompt:
 
 ## YOUR PROCEDURE
 
-### Step 1: Verify All Steps Complete
+### Step 1: Load Progress State
 
+Read progress.json to verify all steps are complete and gather summary:
+
+```bash
+# Check progress.json exists
+if [ ! -f ".workflow/${TASK_NAME}/progress.json" ]; then
+  FAIL: "progress.json not found"
+fi
+
+# Verify all steps are complete
+COMPLETE_STEPS=$(jq '.steps | map(select(.status == "complete")) | length' .workflow/${TASK_NAME}/progress.json)
+TOTAL_STEPS=$(jq '.steps | length' .workflow/${TASK_NAME}/progress.json)
+
+if [ "$COMPLETE_STEPS" -ne "$TOTAL_STEPS" ]; then
+  echo "Not all steps complete:"
+  jq '.steps[] | select(.status != "complete") | {name, status}' .workflow/${TASK_NAME}/progress.json
+  FAIL: "Cannot finalize until all steps are complete"
+fi
+
+echo "✓ All $TOTAL_STEPS steps are complete"
+
+# Load metadata
+TASK_NAME=$(jq -r '.task_name' .workflow/${TASK_NAME}/progress.json)
+MODE=$(jq -r '.mode' .workflow/${TASK_NAME}/progress.json)
+CREATED=$(jq -r '.created' .workflow/${TASK_NAME}/progress.json)
+
+echo "Workflow: $TASK_NAME"
+echo "Mode: $MODE"
+echo "Created: $CREATED"
 ```
-Read PLAN.md
-Read each step-N.md
 
-Verify: All steps have status = "complete"
-If any step ≠ complete:
-  → FAIL, report which step not ready
+Then gather step information from progress.json:
+
+```bash
+# Extract step information from progress.json
+jq '.steps | to_entries[] | 
+  {
+    step: .key,
+    name: .value.name,
+    status: .value.status,
+    iteration: .value.iteration,
+    approval_date: .value.approval_date
+  }' .workflow/${TASK_NAME}/progress.json > steps-summary.json
+
+echo "Step Summary:"
+jq '.' steps-summary.json
 ```
 
-### Step 2: Gather Summary Info
+### Step 2: Generate Commit Summary
 
-```
-From each step-N.md extract:
-- Step name
-- Files created/modified
-- Implementation notes summary
-- Verification results
-- Iterations (if any fix cycles)
-
-Build summary of:
-- Total steps: {N}
-- Total iterations: {count of fix cycles}
-- Files changed: {count}
-```
+Use progress.json to generate the comprehensive commit message:
+- Each completed step with its iteration count
+- Approval dates for Mode 1 workflows
+- Total iterations (sum of all step iterations)
 
 ### Step 3: Create Commit Message
 
@@ -126,6 +156,20 @@ git commit -m "[message from Step 3]"
 git status  (verify clean)
 ```
 
+### Step 4B: Update progress.json Completion Date
+
+Set completion timestamp in progress.json:
+
+```bash
+jq ".completed = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" \
+  .workflow/${TASK_NAME}/progress.json > .workflow/${TASK_NAME}/progress.json.tmp && \
+  mv .workflow/${TASK_NAME}/progress.json.tmp .workflow/${TASK_NAME}/progress.json
+
+echo "✓ Completion date set in progress.json"
+```
+
+Then continue with updating PLAN.md as before.
+
 ### Step 5: Update PLAN.md
 
 Edit PLAN.md:
@@ -159,16 +203,22 @@ git commit -m "Mark workflow complete"
 
 ### Step 7: Report Back
 
-Return summary to execute:
+Report workflow completion to user:
 
 ```
 ✓ Workflow {TASK_NAME} complete
-  - {N} steps verified
-  - {X} files changed
-  - Final commit created
-  - PLAN.md updated
 
-Ready for review: git log --oneline -5
+Summary:
+  - All {N} steps verified and completed
+  - Total iterations: {count} (fix cycles if any)
+  - Completed: {date}
+
+Files updated:
+  - PLAN.md: status = complete
+  - progress.json: completion date set
+  - .workflow/{TASK_NAME}/: all state files finalized
+
+Next steps: review, merge, or deployment
 ```
 
 ---
@@ -204,17 +254,20 @@ Workflow successfully completed.
 ## Critical Rules
 
 **MUST DO:**
-- ✅ Verify all steps = "complete"
-- ✅ Gather info from all step files
+- ✅ Load progress.json and verify all steps = "complete"
+- ✅ Gather info from progress.json (not by scanning step files)
 - ✅ Create comprehensive commit message
 - ✅ Commit workflow state files
+- ✅ Set completion date in progress.json
 - ✅ Update PLAN.md with completion date
-- ✅ Create final commit
+- ✅ Create final commits
 - ✅ Report back to execute
 
 **NEVER DO:**
 - ❌ Finalize if any step not complete
+- ❌ Scan step files manually to gather information
 - ❌ Make generic commit message
+- ❌ Forget to update progress.json completion date
 - ❌ Forget to update PLAN.md
 - ❌ Leave PLAN.md status as "ready-for-review"
 
@@ -223,8 +276,10 @@ Workflow successfully completed.
 ## Success Criteria
 
 Workflow finalized when:
-- ✅ All steps verified as `complete`
-- ✅ Comprehensive commit created
+- ✅ progress.json exists and verified all steps = "complete"
+- ✅ All steps verified as `complete` in progress.json
+- ✅ Comprehensive commit created with progress.json data
+- ✅ progress.json updated with completion date
 - ✅ PLAN.md marked complete with date
 - ✅ Git log shows finalize commits
 - ✅ status = "complete"
@@ -252,11 +307,26 @@ Ready for next steps: review, merge, or deployment
 
 ---
 
+## Error Handling
+
+| Error | Resolution |
+|-------|-----------|
+| progress.json not found | Run bootstrap first, then execute to create workflows |
+| Not all steps complete | Check progress.json, verify all steps have status = "complete" |
+| Invalid progress.json | Check JSON syntax, may have been corrupted |
+| PLAN.md missing | Ensure PLAN.md exists in workflow directory |
+| Git commit fails | Check git status, unstaged changes, or permission issues |
+| jq command fails | Verify jq is installed and progress.json is valid JSON |
+
+Note: Step information is now loaded from progress.json instead of scanning individual step files. This ensures consistency and prevents missing or incomplete data.
+
+---
+
 ## Post-Finalize
 
 After this skill completes:
 1. User can review workflow in git log
-2. Workflow state saved in PLAN.md and step files
+2. Workflow state saved in PLAN.md, progress.json, and step files
 3. Ready for:
    - Code review
    - Merging to main
