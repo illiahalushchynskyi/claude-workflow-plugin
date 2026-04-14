@@ -19,22 +19,35 @@ DO NOT call this skill directly from main session.
 
 ## Procedure
 
-### 1. Read Task File
+### 1. Load Project Config
+
+Read `.workflow-config.json` from task directory. Extract:
+- `projectType` - Language/framework (node, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
+- `buildCommand` - Command to build (e.g., `cargo build`, `go build`, `python setup.py build`)
+- `testCommand` - Command to run tests (e.g., `pytest`, `cargo test`, `go test ./...`)
+- `migrateCommand` - Migration command if applicable (else null)
+
+### 2. Read Task File
 
 Read: `{TASK_DIR}/steps/step-{N}.md`
 
 Extract: Goal, Verification Criteria, Implementation Notes
 
-### 2. Setup & Build
+### 3. Setup & Build
 
-```bash
-npm install
-npm run build
-```
+Run: `${installCommand}` (inferred from projectType) if needed
+Then: `${buildCommand}` (from config)
 
-Fail immediately if build errors.
+Fail immediately if build errors. Handle language-specific failures (e.g., compile vs. build errors).
 
-### 3. Docker Setup (if docker-compose.yml exists)
+Example commands by language:
+- **Node:** `npm install` → `npm run build`
+- **Python:** `pip install -e .` → `python setup.py build`
+- **Rust:** (auto) → `cargo build --release`
+- **Go:** `go mod download` → `go build ./...`
+- **Java:** (auto) → `mvn clean compile` or `gradle build`
+
+### 4. Docker Setup (if docker-compose.yml exists)
 
 If project has docker-compose.yml:
 
@@ -48,26 +61,40 @@ Fail immediately if any step fails.
 
 Document: Docker verification results with service names.
 
-### 4. Migrations Check (if applicable)
+### 5. Migrations Check (if applicable)
 
-Check only—do NOT run migrations.
+Only check if `migrateCommand` is set in config. Check only—do NOT run migrations.
 
+If database is available (project uses one):
 ```bash
+# PostgreSQL
 psql -c "SELECT * FROM schema_migrations"  # Should show completed migrations
 psql -c "\dt"                              # Should show expected tables
+
+# MySQL
+mysql -e "SELECT * FROM migrations"
+mysql -e "SHOW TABLES"
 ```
+
+For other databases, verify migration artifacts exist (sqlx_migrations, diesel migrations, alembic versions, etc).
 
 Fail if incomplete. Don't fix—report what's missing.
 
-### 5. Run Tests
+### 6. Run Tests
 
-```bash
-npm test
-```
+Run: `${testCommand}` from config
 
-Fail immediately if any test fails. Don't fix code—report which test.
+Language-specific test output handling:
+- **Node/npm:** Exit code 0, "passed" in output
+- **Python/pytest:** Exit code 0, "passed" in output
+- **Rust/cargo:** Exit code 0, "test result:" line
+- **Go:** Exit code 0, "ok" in output
+- **Java:** Exit code 0, "BUILD SUCCESS" or tests summary
+- **Ruby/rspec:** Exit code 0, examples passed
 
-### 6. Manual Test Each Criterion
+Fail immediately if any test fails. Don't fix code—report which test and why.
+
+### 7. Manual Test Each Criterion
 
 For EACH criterion in step-{N}.md:
 
@@ -78,7 +105,7 @@ For EACH criterion in step-{N}.md:
 
 Document each with evidence: what tested, expected, got, PASS/FAIL.
 
-### 7. Document Results
+### 8. Document Results
 
 Update {TASK_DIR}/steps/step-{N}.md with Verification section:
 
@@ -88,9 +115,9 @@ Update {TASK_DIR}/steps/step-{N}.md with Verification section:
 **Verifier**: Claude - {DATE}
 
 **Setup & Build:**
-- ✓ npm install successful
-- ✓ npm run build successful
-- ✓ All tests passed: {count}
+- ✓ ${projectType} project setup successful
+- ✓ ${buildCommand} succeeded
+- ✓ ${testCommand} passed: {count} tests
 
 **Criteria Results:**
 
@@ -104,7 +131,7 @@ Update {TASK_DIR}/steps/step-{N}.md with Verification section:
    - Evidence: [proof]
 ```
 
-### 8. Report to Execute
+### 9. Report to Execute
 
 Report result (do NOT update step status—execute manages it):
 
@@ -127,10 +154,12 @@ Report result (do NOT update step status—execute manages it):
 ## Critical
 
 **MUST:**
-- ✅ Build project—fail if errors
-- ✅ Run all tests—fail if any fail
-- ✅ Check migrations ran (don't run them)
-- ✅ Verify docker (if docker-compose.yml exists)
+- ✅ Load .workflow-config.json and extract projectType, buildCommand, testCommand
+- ✅ Build project using buildCommand—fail if errors
+- ✅ Run tests using testCommand from config—fail if any fail
+- ✅ Handle language-specific test output (don't assume npm format)
+- ✅ Check migrations (if migrateCommand is set) - don't run them
+- ✅ Verify docker (if docker-compose.yml exists) - language-independent
 - ✅ Manually test EACH criterion with evidence
 - ✅ Report clear PASS or FAIL
 
