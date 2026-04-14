@@ -9,6 +9,11 @@ node:
   test: npm test
   install: npm install
   migrate: null
+  migration_frameworks:
+    - knex migrations/
+    - sequelize migrations/
+    - typeorm migrations/
+    - npm run migrate
 
 # Python
 python:
@@ -20,6 +25,10 @@ python:
   test: pytest
   install: pip install -r requirements.txt
   migrate: null
+  migration_frameworks:
+    - alembic upgrade head
+    - alembic/
+    - migrations/
 
 # Rust
 rust:
@@ -29,6 +38,10 @@ rust:
   test: cargo test
   install: cargo build
   migrate: null
+  migration_frameworks:
+    - sqlx migrate run
+    - sqlx/migrations/
+    - diesel/migrations/
 
 # Go
 go:
@@ -38,6 +51,10 @@ go:
   test: go test ./...
   install: go mod download
   migrate: null
+  migration_frameworks:
+    - migrate -path migrations -database postgres up
+    - migrations/
+    - sqlc/
 
 # Java (Maven)
 java-maven:
@@ -47,6 +64,10 @@ java-maven:
   test: mvn test
   install: mvn install
   migrate: null
+  migration_frameworks:
+    - mvn flyway:migrate
+    - mvn liquibase:update
+    - src/main/resources/db/migration/
 
 # Java (Gradle)
 java-gradle:
@@ -57,6 +78,10 @@ java-gradle:
   test: gradle test
   install: gradle build
   migrate: null
+  migration_frameworks:
+    - gradle flywayMigrate
+    - gradle liquibaseUpdate
+    - src/main/resources/db/migration/
 
 # Ruby
 ruby:
@@ -66,6 +91,9 @@ ruby:
   test: rspec
   install: bundle install
   migrate: null
+  migration_frameworks:
+    - rake db:migrate
+    - db/migrate/
 
 # C/C++ (Make)
 cpp-make:
@@ -75,6 +103,8 @@ cpp-make:
   test: make test
   install: make
   migrate: null
+  migration_frameworks:
+    - null  # C/C++ typically doesn't use migrations
 
 # C/C++ (CMake)
 cpp-cmake:
@@ -84,6 +114,8 @@ cpp-cmake:
   test: ctest
   install: cmake --build . --target install
   migrate: null
+  migration_frameworks:
+    - null  # C/C++ typically doesn't use migrations
 
 # Generic (if only Makefile found)
 generic-make:

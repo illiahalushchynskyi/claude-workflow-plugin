@@ -140,9 +140,9 @@ Example: "✓ API endpoint POST /users returns 201 status and user object with i
 [If FAIL - issues list]
 ```
 
-### Step 5: Detect Project Type
+### Step 5: Detect Project Type and Migration Framework
 
-Detect the project's programming language/build system by checking for these files (in order):
+**Detect project language/build system** by checking for these files (in order):
 
 1. `package.json` → `node`
 2. `pyproject.toml` or `requirements.txt` → `python`
@@ -155,10 +155,18 @@ Detect the project's programming language/build system by checking for these fil
 9. `Makefile` → `generic-make`
 10. If none found → `other` (ask user for build/test commands)
 
+**Detect migration framework** (if applicable) by checking for:
+- Node.js: `knex.js`, `sequelize`, `typeorm` migrations directories
+- Python: `alembic/`, `migrations/` (SQLAlchemy)
+- Go: `migrations/`, `sqlc/` directories or sql-migrate config
+- Rust: `sqlx/migrations/`, `diesel/migrations/`
+- Ruby: `db/migrate/`
+- Java: `db/changelog/` (Liquibase) or `src/main/resources/db/migration/` (Flyway)
+
 Load the detected project type's commands from `skills/templates/commands.yaml`. If detection fails or commands are missing, ask user to provide:
 - Build command (e.g., `cargo build`)
 - Test command (e.g., `cargo test`)
-- Optional: Migrate command (e.g., `sqlx migrate run`)
+- Optional: Migrate command (e.g., `sqlx migrate run`, `npm run migrate`, `alembic upgrade head`)
 
 ### Step 5.5: Create .workflow-config.json
 
