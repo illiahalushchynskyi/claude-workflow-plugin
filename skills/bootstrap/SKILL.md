@@ -140,20 +140,51 @@ Example: "✓ API endpoint POST /users returns 201 status and user object with i
 [If FAIL - issues list]
 ```
 
-### Step 5: Create .workflow-config.json (Optional)
+### Step 5: Detect Project Type
+
+Detect the project's programming language/build system by checking for these files (in order):
+
+1. `package.json` → `node`
+2. `pyproject.toml` or `requirements.txt` → `python`
+3. `Cargo.toml` → `rust`
+4. `go.mod` → `go`
+5. `pom.xml` → `java-maven`
+6. `build.gradle` or `build.gradle.kts` → `java-gradle`
+7. `Gemfile` → `ruby`
+8. `CMakeLists.txt` → `cpp-cmake`
+9. `Makefile` → `generic-make`
+10. If none found → `other` (ask user for build/test commands)
+
+Load the detected project type's commands from `skills/templates/commands.yaml`. If detection fails or commands are missing, ask user to provide:
+- Build command (e.g., `cargo build`)
+- Test command (e.g., `cargo test`)
+- Optional: Migrate command (e.g., `sqlx migrate run`)
+
+### Step 5.5: Create .workflow-config.json
 
 Create `.workflow/TASK_NAME/.workflow-config.json`:
 
 ```json
 {
   "taskName": "{TASK_NAME}",
-  "projectType": "api|library|app|other",
+  "projectType": "{DETECTED_TYPE}",
+  "buildCommand": "{BUILD_COMMAND}",
+  "testCommand": "{TEST_COMMAND}",
+  "migrateCommand": null,
   "commitStyle": "conventional",
   "push": false
 }
 ```
 
-### Step 5.5: Initialize progress.json
+**Field Definitions:**
+- `projectType` (string) - Detected or user-specified language/framework (node, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
+- `buildCommand` (string) - Command to build the project (e.g., `npm run build`, `cargo build --release`)
+- `testCommand` (string) - Command to run tests (e.g., `npm test`, `pytest`)
+- `migrateCommand` (string|null) - Command to run migrations, if applicable (e.g., `npm run migrate`, `sqlx migrate run`)
+
+These commands are used by implementer and verifier subagents instead of assuming npm/node.
+
+### Step 6: Initialize progress.json
 
 Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking (timestamps, iterations, approvals). Build steps from the step files you just created.
 
@@ -218,15 +249,16 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 - PLAN.md is human-facing summary; progress.json is system source of truth
 - This file is updated by workflow:execute, workflow:implementer, and workflow:verifier
 
-### Step 6: Verify Files Created
+### Step 7: Verify Files Created
 
 Verify:
 - [ ] PLAN.md exists with correct YAML frontmatter (status, mode, created, started: null, completed: null)
 - [ ] All step-N.md files exist with correct frontmatter
 - [ ] progress.json is valid JSON with all steps at "pending" status
-- [ ] .workflow-config.json exists with project metadata
+- [ ] .workflow-config.json exists with projectType, buildCommand, testCommand, migrateCommand fields
+- [ ] buildCommand and testCommand are valid for detected projectType
 
-### Step 7: Report to User
+### Step 8: Report to User
 
 Report files created (PLAN.md, progress.json, steps/step-*.md, .workflow-config.json), status as "Ready to execute", and next step: `/workflow:execute`
 
