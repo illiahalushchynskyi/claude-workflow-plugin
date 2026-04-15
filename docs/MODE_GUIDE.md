@@ -17,44 +17,57 @@ Both modes use the same agents and file structure. The difference is when humans
 
 ```
 For each step (in order):
-  1. Implementer works on step N
-  2. Implementer marks step N status: verification
-  3. Verifier tests step N
-  4. Verifier marks step N: complete OR needs-fix
-  5. **[IF COMPLETE]** → Human approval gate
+  1. Implementer works on step N (status: implementation)
+  2. Implementer finishes and commits (status: verification)
+  3. Verifier tests step N (still status: verification)
+  4. Verifier passes/fails:
+     - Tests pass: status → awaiting-approval
+     - Tests fail: status → needs-fix
+  
+  5. **[IF AWAITING-APPROVAL]** → Human approval gate
+     - Workflow pauses (workflow_status: paused)
      - Human reviews step N
-     - [APPROVE] → Proceed to step N+1
-     - [REQUEST CHANGES] → Back to implementer for step N
-  6. **[IF NEEDS-FIX]** → Implementer fixes (no human pause)
+     - [APPROVE] → status = complete, continue to step N+1
+     - [REQUEST CHANGES] → status = needs-fix, iteration++
+  
+  6. **[IF NEEDS-FIX]** → Implementer fixes (loop back)
+     - Implementer re-works: status → implementation → verification
      - Verifier re-tests
-     - [Loop until PASS or escalation]
 
-[After all steps complete and approved]
-  → Human final approval
+[After all steps reach status: complete]
+  → execute asks for final approval
   → Finalize creates commit
 ```
 
-### Approval Gates in Mode 1
+### Status Transitions in Mode 1
 
 ```
-Step 1 Complete
+Step 1:
+  pending → implementation → verification → awaiting-approval ↓ PAUSE
+                                               ↓         ↓
+                                           approve   request-changes
+                                               ↓         ↓
+                                            complete   needs-fix → implementation
+
+Step 2:
+  pending → implementation → verification → awaiting-approval ↓ PAUSE
+                                               (repeat)
+
+[All steps complete]
     ↓
-[HUMAN APPROVAL GATE 1]
+Execute asks for final approval
     ↓
-Step 2 Complete
-    ↓
-[HUMAN APPROVAL GATE 2]
-    ↓
-Step 3 Complete
-    ↓
-[HUMAN APPROVAL GATE 3]
-    ↓
-[All complete]
-    ↓
-[FINAL HUMAN APPROVAL]
+[FINAL APPROVAL]
     ↓
 Finalize → Commit
 ```
+
+**Key differences from old Mode 1:**
+- No automatic status updates; execute controls all transitions
+- Step stops at `awaiting-approval` and pauses workflow
+- Iteration counter increments on `needs-fix`
+- All timestamps recorded in progress.json
+
 
 ### Key Characteristics
 
@@ -64,17 +77,16 @@ Finalize → Commit
 - **Approval points:** N+1 (one per step plus final)
 - **Reversal:** Easy (stop at any step, revert if needed)
 
-### Configuration (Mode 1)
+### Pause and Resume in Mode 1
 
-In `.workflow-config.json`:
+When a step is in `awaiting-approval`:
+- `workflow_status` = `paused`
+- User can close Claude Code and come back later
+- Run `/workflow:execute` again to resume from same step
+- No re-execution of completed steps
+- All timestamps preserved in progress.json
 
-```json
-{
-  "mode": 1,
-  "step_approval_required": true,
-  "auto_advance": false
-}
-```
+This enables asynchronous review workflows where approval may take time.
 
 ## Mode 2: End-to-End Execution
 
@@ -82,46 +94,58 @@ In `.workflow-config.json`:
 
 ```
 For each step (in order):
-  1. **[Check: Previous step complete?]**
-     - If yes: proceed
-     - If no: wait for verifier
-  2. Implementer works on step N
-  3. Implementer marks step N status: verification
-  4. Verifier tests step N
-  5. Verifier marks step N: complete OR needs-fix
-  6. **[IF COMPLETE]** → NO human pause
-     - Implementer can now proceed to step N+1
-     - Executor automatically signals implementer for next step
-  7. **[IF NEEDS-FIX]** → Implementer fixes (no human pause)
+  1. Implementer works on step N (status: implementation)
+  2. Implementer finishes and commits (status: verification)
+  3. Verifier tests step N (still status: verification)
+  4. Verifier passes/fails:
+     - Tests pass: status → complete (AUTO, no human pause)
+     - Tests fail: status → needs-fix
+  
+  5. **[IF COMPLETE]** → Continue to next step IMMEDIATELY
+     - No workflow pause
+     - No human approval gate
+     - execute automatically continues loop
+  
+  6. **[IF NEEDS-FIX]** → Implementer fixes (loop back)
+     - Implementer re-works: status → implementation → verification
      - Verifier re-tests
-     - [Loop until PASS or escalation]
 
-[After all steps complete and verified]
-  → Human final approval (SINGLE APPROVAL GATE)
+[After all steps reach status: complete]
+  → execute asks for final approval
   → Finalize creates commit
 ```
 
-### Verification Gates in Mode 2
+**Key difference:** When verification passes, status is set directly to `complete` without any `awaiting-approval` pause.
+
+### Status Transitions in Mode 2
 
 ```
-Implementer Step 1
+Step 1:
+  pending → implementation → verification → complete (AUTO)
+                                              ↓ (no pause)
+Step 2:
+  pending → implementation → verification → complete (AUTO)
+                                              ↓ (no pause)
+Step 3:
+  pending → implementation → verification → complete (AUTO)
+                                              ↓ (no pause)
+[All steps complete]
     ↓
-Verifier Step 1 [GATE]
-    ↓
-[IF PASS] → Implementer Step 2
-    ↓
-Verifier Step 2 [GATE]
-    ↓
-[IF PASS] → Implementer Step 3
-    ↓
-Verifier Step 3 [GATE]
-    ↓
-[All complete]
+Execute asks for final approval
     ↓
 [SINGLE HUMAN APPROVAL]
     ↓
 Finalize → Commit
+
+[Alternative path if tests fail:]
+  verification → needs-fix → implementation → verification → complete
 ```
+
+**Key difference from Mode 1:**
+- No `awaiting-approval` status
+- Verification pass directly completes step
+- No workflow pauses between steps
+- Continuous execution until all complete
 
 ### Key Characteristics
 
@@ -131,17 +155,12 @@ Finalize → Commit
 - **Approval points:** 1 (final approval only)
 - **Reversal:** Harder (commitment to all steps)
 
-### Configuration (Mode 2)
+### No Pause/Resume in Mode 2
 
-In `.workflow-config.json`:
-
-```json
-{
-  "mode": 2,
-  "auto_advance": true,
-  "step_approval_required": false
-}
-```
+Mode 2 workflows don't pause between steps:
+- If Claude Code closes unexpectedly, run `/workflow:execute` to resume
+- Execute continues from the first non-complete step
+- All previous step timestamps are preserved in progress.json
 
 ## Comparison Table
 
