@@ -16,6 +16,8 @@ When you see `implementer` or `verifier` mentioned here:
 
 **You are the orchestrator. You dispatch agents. You do NOT run implementer or verifier yourself.**
 
+**See [EXECUTE_AGENT_DISPATCH.md](../docs/EXECUTE_AGENT_DISPATCH.md) for detailed patterns and common mistakes.**
+
 ---
 
 Execute manages the workflow state machine and coordinates:
