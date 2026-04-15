@@ -7,10 +7,21 @@ description: Use when a workflow plan is ready and execution should begin - orch
 
 **⚠️ ORCHESTRATOR: Runs in MAIN SESSION**
 
+## CRITICAL: Agent vs Skill
+
+When you see `implementer` or `verifier` mentioned here:
+- ❌ These are NOT skills to call via `Skill(skill: "workflow:implementer")`
+- ✅ These are SUBAGENTS to dispatch via `Agent(subagent_type="general-purpose")`
+- ✅ The Agent prompt must contain `Invoke: Skill(skill: "workflow:implementer")` for the subagent to execute
+
+**You are the orchestrator. You dispatch agents. You do NOT run implementer or verifier yourself.**
+
+---
+
 Execute manages the workflow state machine and coordinates:
-- **implementer** → ALWAYS dispatched as subagent (never direct)
-- **verifier** → ALWAYS dispatched as subagent (never direct)
-- **finalize** → Runs in main session (direct invocation)
+- **implementer** → ALWAYS dispatched as Agent subagent (NEVER direct Skill)
+- **verifier** → ALWAYS dispatched as Agent subagent (NEVER direct Skill)
+- **finalize** → Runs in main session (direct Skill invocation)
 
 ## When to Use
 
@@ -95,89 +106,102 @@ else
 fi
 ```
 
-### Dispatch Implementer (Subagent)
+### Dispatch Implementer (Subagent) - CRITICAL RULE
 
-When a step is `pending` or `needs-fix`, dispatch implementer as subagent:
+**You are the orchestrator. You do NOT write code. You dispatch the implementer subagent.**
 
-1. First, load `.workflow-config.json` to get projectType, buildCommand, testCommand, migrateCommand
-2. Include this info in the subagent prompt
+When a step is `pending` or `needs-fix`, use Agent() tool to dispatch implementer:
 
 ```python
 Agent(
-  description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
+  description: "Implement {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
   prompt: f"""
-You are implementing step {N} of {TASK_NAME}.
+You are a subagent implementing step {N} of {TASK_NAME}.
 
-**TASK:**
-1. Invoke: Skill(skill: "workflow:implementer")
-2. Follow the skill procedure exactly
-3. The skill guides you through implementation
+**YOUR TASK:**
+1. Load and read: .workflow/{TASK_NAME}/steps/step-{N}.md
+2. Invoke: Skill(skill: "workflow:implementer")
+3. Follow the skill procedure exactly
+4. The skill teaches you how to implement this step
 
-**CONTEXT:**
+**CONTEXT FOR YOUR WORK:**
 - Task: {TASK_NAME}
 - Step: {N} ({STEP_NAME})
-- Task directory: {TASK_DIR_PATH}
+- Task directory: .workflow/{TASK_NAME}/
 - Mode: {MODE} (1=step-by-step, 2=continuous)
 - Project Type: {PROJECT_TYPE}
 - Build command: {BUILD_COMMAND}
 - Test command: {TEST_COMMAND}
 - Migrate command: {MIGRATE_COMMAND}
 
-**DONE WHEN:**
-step-{N}.md shows status: verification
+**SUCCESS CRITERIA:**
+- step-{N}.md status is set to 'verification'
+- Code changes committed
+- All tests pass
+- Implementation section filled with notes
 """
 )
 ```
 
-The skill will load .workflow-config.json and use these commands for building, testing, and migrations.
+**Key points:**
+- You call Agent() with the prompt above
+- The subagent reads workflow:implementer skill and follows it
+- You wait for Agent() to complete
+- The subagent updates the step file
 
-**After implementer returns:**
+**After implementer subagent returns:**
 1. Read: `.workflow/{TASK_NAME}/steps/step-{N}.md`
-2. Check frontmatter status field
-3. If status == `verification` → Continue to verifier
+2. Check frontmatter `status:` field
+3. If status == `verification` → Continue to verifier dispatch
 4. If status != `verification` → Ask user for guidance (retry/abort)
 
-### Dispatch Verifier (Subagent)
+### Dispatch Verifier (Subagent) - CRITICAL RULE
 
-When a step is in `verification` status, dispatch verifier as subagent:
+**You are the orchestrator. You do NOT test code. You dispatch the verifier subagent.**
 
-1. First, load `.workflow-config.json` to get projectType, buildCommand, testCommand, migrateCommand
-2. Include this info in the subagent prompt
+When a step is in `verification` status, use Agent() tool to dispatch verifier:
 
 ```python
 Agent(
-  description: f"Verify {TASK_NAME} step {N}: {STEP_NAME}",
+  description: "Verify {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
   prompt: f"""
-You are verifying step {N} of {TASK_NAME}.
+You are a subagent verifying step {N} of {TASK_NAME}.
 
-**TASK:**
-1. Invoke: Skill(skill: "workflow:verifier")
-2. Follow the skill procedure exactly
-3. The skill guides you through verification
+**YOUR TASK:**
+1. Load and read: .workflow/{TASK_NAME}/steps/step-{N}.md
+2. Invoke: Skill(skill: "workflow:verifier")
+3. Follow the skill procedure exactly
+4. The skill teaches you how to verify this step
 
-**CONTEXT:**
+**CONTEXT FOR YOUR WORK:**
 - Task: {TASK_NAME}
 - Step: {N} ({STEP_NAME})
-- Task directory: {TASK_DIR_PATH}
+- Task directory: .workflow/{TASK_NAME}/
 - Mode: {MODE} (1=step-by-step, 2=continuous)
 - Project Type: {PROJECT_TYPE}
 - Build command: {BUILD_COMMAND}
 - Test command: {TEST_COMMAND}
 - Migrate command: {MIGRATE_COMMAND}
 
-**DONE WHEN:**
-step-{N}.md shows status: complete OR needs-fix
+**SUCCESS CRITERIA:**
+- step-{N}.md status is set to 'complete' (all tests pass, criteria met)
+- OR status is set to 'needs-fix' (issues documented)
+- Verification section filled with test results and evidence
 """
 )
 ```
 
-The skill will load .workflow-config.json and use these commands for building, testing, and migrations.
+**Key points:**
+- You call Agent() with the prompt above
+- The subagent reads workflow:verifier skill and follows it
+- You wait for Agent() to complete
+- The subagent updates the step file with pass/fail status
 
-**After verifier returns:**
+**After verifier subagent returns:**
 1. Read: `.workflow/{TASK_NAME}/steps/step-{N}.md`
-2. Check frontmatter status field
+2. Check frontmatter `status:` field
 3. If status == `complete`:
    - Mode 1: Update progress.json step status to `awaiting-approval`, set `awaiting_approval_since` timestamp
    - Mode 2: Automatically move to `complete` (no user approval needed)
@@ -238,62 +262,115 @@ Result:
 
 ---
 
-## Subagent Dispatch Rules
+## Subagent Dispatch Rules - STRICT ENFORCEMENT
 
-### implementer - ALWAYS Subagent
+### implementer - ALWAYS Subagent (NEVER Direct Skill)
 
-When dispatching implementer:
-- Use `Agent(subagent_type="general-purpose")`
-- Never use `Skill(skill: "workflow:implementer")` directly
-- Include full step context in prompt
-- Include projectType, buildCommand, testCommand, migrateCommand from .workflow-config.json
-- Subagent updates step status to `verification` when complete
-- You verify status changed before proceeding
+**CORRECT:**
+```python
+Agent(
+  description: "Implement step X",
+  subagent_type: "general-purpose",
+  prompt: "...\nInvoke: Skill(skill: 'workflow:implementer')\n..."
+)
+```
 
-### verifier - ALWAYS Subagent
+**WRONG - DO NOT DO THIS:**
+```python
+❌ Skill(skill: "workflow:implementer")  # FORBIDDEN - Direct skill call
+❌ # You writing code yourself  # FORBIDDEN - Orchestrator never codes
+```
 
-When dispatching verifier:
-- Use `Agent(subagent_type="general-purpose")`
-- Never use `Skill(skill: "workflow:verifier")` directly
-- Include full step context in prompt
-- Include projectType, buildCommand, testCommand, migrateCommand from .workflow-config.json
-- Subagent updates step status to `complete` or `needs-fix`
-- You verify status changed before proceeding
+**Rules:**
+- ✅ Use `Agent(subagent_type="general-purpose")` to dispatch
+- ✅ Include `Invoke: Skill(skill: "workflow:implementer")` in the prompt
+- ✅ Include project config (projectType, buildCommand, testCommand, migrateCommand)
+- ✅ Subagent reads skill, implements, updates step status to `verification`
+- ✅ You wait for Agent() to return, then check step-{N}.md status
 
-### finalize - Main Session (Direct)
+### verifier - ALWAYS Subagent (NEVER Direct Skill)
 
-When all steps complete:
-- Use `Skill(skill: "workflow:finalize")` directly
-- Runs in main session (NOT as subagent)
-- Updates PLAN.md status to `complete`
-- Creates final commit
+**CORRECT:**
+```python
+Agent(
+  description: "Verify step X",
+  subagent_type: "general-purpose",
+  prompt: "...\nInvoke: Skill(skill: 'workflow:verifier')\n..."
+)
+```
+
+**WRONG - DO NOT DO THIS:**
+```python
+❌ Skill(skill: "workflow:verifier")  # FORBIDDEN - Direct skill call
+❌ # You running tests yourself  # FORBIDDEN - Orchestrator never verifies
+```
+
+**Rules:**
+- ✅ Use `Agent(subagent_type="general-purpose")` to dispatch
+- ✅ Include `Invoke: Skill(skill: "workflow:verifier")` in the prompt
+- ✅ Include project config (projectType, buildCommand, testCommand, migrateCommand)
+- ✅ Subagent reads skill, tests, updates step status to `complete` or `needs-fix`
+- ✅ You wait for Agent() to return, then check step-{N}.md status
+
+### finalize - Main Session (Direct Skill ONLY)
+
+**CORRECT:**
+```python
+Skill(skill: "workflow:finalize")  # OK - Main session direct
+```
+
+**WRONG:**
+```python
+❌ Agent(...prompt="...workflow:finalize...")  # FORBIDDEN - Not a subagent task
+```
+
+**Rules:**
+- ✅ Use `Skill(skill: "workflow:finalize")` directly (you orchestrate this)
+- ✅ Runs in main session only (not as subagent)
+- ✅ Updates PLAN.md status to `complete`
+- ✅ Creates final commit
 
 ---
 
-## Critical Rules
+## Critical Rules - YOU ARE THE ORCHESTRATOR, NOT THE WORKER
+
+**YOUR ROLE:**
+- You manage state files (PLAN.md, progress.json)
+- You dispatch agents (implementer, verifier)
+- You ask users for approval
+- You orchestrate the workflow
+
+**AGENTS' ROLE:**
+- implementer agent: writes code, runs tests, commits, updates step file
+- verifier agent: builds project, runs tests, verifies criteria, updates step file
+- You do NONE of this work yourself
+
+---
 
 **MUST DO:**
-- ✅ Read PLAN.md, progress.json, and .workflow-config.json first
-- ✅ Set workflow_status and timestamps in progress.json properly
-- ✅ Extract projectType, buildCommand, testCommand, migrateCommand from config
+- ✅ Read PLAN.md, progress.json, and .workflow-config.json first (YOU do this)
+- ✅ Set workflow_status and timestamps in progress.json (YOU do this)
+- ✅ Extract projectType, buildCommand, testCommand, migrateCommand from config (YOU do this)
 - ✅ Ask user via AskUserQuestion before dispatching first Agent()
 - ✅ Use Agent(subagent_type="general-purpose") for implementer and verifier
-- ✅ Include task context, step directory, AND project config info in Agent prompt
-- ✅ Instruct Agent to `Invoke: Skill(skill: "workflow:...")`
+- ✅ Include `Invoke: Skill(skill: "workflow:implementer")` in implementer Agent prompt
+- ✅ Include `Invoke: Skill(skill: "workflow:verifier")` in verifier Agent prompt
 - ✅ Wait for Agent() to return completely
-- ✅ Read step-N.md to verify status changed
+- ✅ Read step-N.md to verify subagent updated status field
 - ✅ Handle awaiting-approval status correctly (Mode 1 vs Mode 2)
 - ✅ Set paused status when awaiting approval, resume when approval given
 - ✅ Handle failures gracefully
 
 **NEVER DO:**
 - ❌ Skip initial AskUserQuestion
-- ❌ Write code or make changes yourself
-- ❌ Run tests or build yourself
-- ❌ Modify step files directly (agents own this)
-- ❌ Dispatch implementer/verifier directly via Skill() (always Agent())
-- ❌ Assume success without reading updated files
+- ❌ Write code or make changes yourself (that's implementer's job)
+- ❌ Run tests or build yourself (that's verifier's job)
+- ❌ Modify step files directly (agents update them via skills)
+- ❌ Call `Skill(skill: "workflow:implementer")` directly—always dispatch via Agent()
+- ❌ Call `Skill(skill: "workflow:verifier")` directly—always dispatch via Agent()
+- ❌ Assume success without reading updated step files
 - ❌ Dispatch multiple agents in parallel (go sequentially)
+- ❌ Include full skill procedure inline in prompt (use `Invoke: Skill()` instead)
 
 ---
 
