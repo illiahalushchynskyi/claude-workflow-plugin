@@ -17,7 +17,8 @@ Use `workflow:bootstrap` when starting a new workflow task with user-provided ta
 
 ## Input
 
-User provides: task name, task title, description, mode (1 or 2), and step list with acceptance criteria.
+User provides: task name, task title, description, and step list with verification criteria.
+**NOTE:** Mode is NOT selected here—it will be chosen by user when running `/workflow:execute`
 
 ## Output
 
@@ -31,15 +32,14 @@ Ask user for missing information:
 - Task name (lowercase, hyphens only)
 - Task title
 - Description
-- Mode (1 or 2)
 - List of steps with:
   - Step name
   - Goal
-  - Acceptance criteria (at least 3 per step - these are what verifier will check)
+  - Verification criteria (at least 3 per step - these are what verifier will check)
 
 Use AskUserQuestion if any field missing.
 
-**Acceptance Criteria Format:**
+**Verification Criteria Format:**
 Each criterion must be:
 - **Specific** - not vague like "it works" or "feature is done"
 - **Testable** - can verify with concrete proof (curl output, DB query, test output, etc.)
@@ -50,7 +50,7 @@ Each criterion must be:
   - ✗ BAD: "User endpoint works correctly"
   - ✗ BAD: "Everything is done"
 
-When user provides acceptance criteria, validate they meet this standard. Ask for clarification if criteria are too vague.
+When user provides verification criteria, validate they meet this standard. Ask for clarification if criteria are too vague.
 
 ### Step 2: Create Directory Structure
 
@@ -113,7 +113,7 @@ created: {TODAY}
 
 - [To be determined by implementer]
 
-## Acceptance Criteria
+## Verification Criteria
 
 List each criterion the verifier will check:
 
@@ -208,9 +208,9 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
 
 ### Step 6: Initialize progress.json
 
-Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking (timestamps, iterations, approvals). Build steps from the step files you just created.
+Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking. This is the **SOURCE OF TRUTH** for all workflow state.
 
-**Structure:**
+**Example - 2-step workflow initialization:**
 
 ```json
 {

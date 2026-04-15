@@ -101,9 +101,9 @@ AskUserQuestion:
 
 **If approve:**
 - Update progress.json: step status = `complete`
-- Update PLAN.md: step row status = `complete`
 - Continue to next step (loop back to Step 1 if more steps)
 - If all complete → Finalize
+- (PLAN.md status updated only by finalize, not here)
 
 **If request changes:**
 - Update progress.json: step status = `needs-fix`
@@ -154,9 +154,9 @@ Config:
 - migrateCommand: {MIGRATE_COMMAND}
 
 Your step is complete when:
-- Code changes implemented
+- Code changes implemented and committed
 - Tests pass
-- step-{N}.md status = verification
+- step-{N}.md Implementation section filled with changes and results
 """
 )
 ```
@@ -182,17 +182,19 @@ Config:
 Your step is complete when:
 - All tests pass
 - All criteria verified
-- step-{N}.md status = complete or needs-fix
+- step-{N}.md Verification section filled with results and pass/fail status
 """
 )
 ```
 
 **After Agent returns:**
-1. Read `.workflow/{TASK_NAME}/progress.json` to check new status
-2. Update step status in progress.json based on what agent did:
-   - If implementing: set status = `verification`, increment iteration if needed
-   - If verifying: set status = `complete` or `needs-fix` (agent reports which)
-3. If Mode 1 and step now complete: set `awaiting_approval_since` to current timestamp
+1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md` Implementation or Verification section to see what agent did
+   - Check if implementation section is filled (code completed)
+   - Check if verification section is filled with PASS/FAIL results
+2. Update progress.json step status:
+   - If implementing: set status = `verification`
+   - If verifying: set status = `complete` (if all criteria pass) or `needs-fix` (if any fail)
+3. If Mode 1 and step is now `complete`: set `awaiting_approval_since` to current ISO8601 timestamp
 4. Loop back to Step 1 (to handle new status)
 
 #### Step 5b: Current Session
@@ -225,11 +227,13 @@ The skill will guide user to:
 - Set status = `complete` or `needs-fix`
 
 **After Skill returns:**
-1. Read `.workflow/{TASK_NAME}/progress.json` to check new status
-2. Verify status changed correctly:
-   - After implementer: should be `verification` now (or `needs-fix` if failed)
-   - After verifier: should be `complete` or `needs-fix` now
-3. If Mode 1 and step now complete: set `awaiting_approval_since` to current timestamp
+1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md` Implementation or Verification section to see what was done
+   - Check if implementation section is filled (code completed)
+   - Check if verification section is filled with PASS/FAIL results
+2. Update progress.json step status:
+   - If implementer just finished: set status = `verification`
+   - If verifier just finished: set status = `complete` (if all criteria pass) or `needs-fix` (if any fail)
+3. If Mode 1 and step is now `complete`: set `awaiting_approval_since` to current ISO8601 timestamp
 4. Loop back to Step 1 (to handle new status)
 
 ---

@@ -135,21 +135,19 @@ Update {TASK_DIR}/steps/step-{N}.md with Verification section:
 
 ### 9. Report to Execute
 
-Report result (do NOT update step status—execute manages it):
+Do NOT update step status—execute manages it based on Verification section results.
 
-**All pass:**
-```
-✓ Step {N} verified
-- All tests passing
-- All criteria verified
-```
+**Completion signal:** step-{N}.md Verification section is fully filled with:
+- Build results (success or failure details)
+- Test results (all passed or specific failures)
+- Criterion verification results (each criterion PASS/FAIL with evidence)
 
-**Any fail:**
-```
-✗ Step {N} failed verification
-- Test: [name] failed: [reason]
-- Criterion: [name] failed: [reason]
-```
+**In Subagent mode:** Agent naturally completes when this step finishes  
+**In Current Session mode:** Skill naturally completes when this step finishes
+
+Execute will read Verification section to determine:
+- If all criteria PASSED → set status = `complete`
+- If any criteria FAILED → set status = `needs-fix`
 
 ---
 

@@ -42,13 +42,17 @@ DO NOT call this skill directly from main session.
 6. **Commit** - `git commit -m "Implement step {N}: {goal}"`
 
 7. **Update Implementation section** in step-{N}.md
-   - Files modified/created
-   - Summary of changes
+   - List of files modified/created
+   - Summary of changes made
    - Test results (including which testCommand was used)
    - Migration results (if migrations ran)
    - Do NOT update status field (execute manages it)
 
-8. **Report** back to execute with brief summary
+8. **Report to Execute**
+   - In Subagent mode: Agent naturally completes when this step finishes
+   - In Current Session mode: Skill naturally completes when this step finishes
+   - **Completion signal:** step-{N}.md Implementation section is fully filled
+   - Execute will read Implementation section to confirm work is done, then set status = `verification`
 
 ## Files
 
