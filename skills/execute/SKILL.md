@@ -16,7 +16,7 @@ Execute manages workflow state and coordinates step execution in strict order.
 ### Step 1: Read Current State
 
 1. Check progress.json exists (if not: STOP, tell user to run `/workflow:bootstrap`)
-2. Read `.workflow/{TASK_NAME}/PLAN.md` (mode: 1 or 2)
+2. Read `.workflow/{TASK_NAME}/PLAN.md` (mode: Step Manual Approve or Final Approve)
 3. Read `.workflow/{TASK_NAME}/progress.json` (step statuses, workflow_status)
 4. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
 5. Find first step with status ≠ "complete"
@@ -26,7 +26,7 @@ Execute manages workflow state and coordinates step execution in strict order.
 ```
 Current state:
 - Workflow: {TASK_NAME}
-- Mode: {1 or 2}
+- Mode: {Step Manual Approve or Final Approve}
 - Current step: {N} ({STEP_NAME})
 - Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
 - Workflow status: {initialized/in-progress/paused/completed}
@@ -60,25 +60,28 @@ Mode 2: After implementer finishes → Verifier tests → Automatic next step (n
 **Ask user:**
 ```
 AskUserQuestion:
-  question: "Is Mode {1 or 2} correct?"
+  question: "Is {current mode} correct?"
   header: "Workflow Mode"
   options:
-    - "Yes, Mode {current} is correct"
-    - "Change to Mode {other}"
+    - "Yes, {current mode} is correct"
+    - "Change to {other mode}"
 ```
+
+**Modes:**
+- Step Manual Approve = Approve each step after verifier finishes (before moving to next)
+- Final Approve = Approve only at the end of all steps
 
 **If user wants to change:**
 - Update PLAN.md: mode field
 - Update progress.json: mode field
-- Explain: "Mode 1 = step-by-step approval, Mode 2 = continuous"
 
 **Then continue with chosen mode.**
 
 ---
 
-### Step 4: Check If Approval Needed (Mode 1 Only)
+### Step 4: Check If Step Approval Needed (Step Manual Approve Only)
 
-**If Mode 1 AND step status is `awaiting-approval`:**
+**If Step Manual Approve mode AND step status is `awaiting-approval`:**
 
 ```
 AskUserQuestion:
@@ -98,7 +101,7 @@ AskUserQuestion:
 - Update progress.json: step status = `needs-fix`
 - Loop back to Step 5 (to implement again)
 
-**If NOT Mode 1 or NOT awaiting-approval:** Skip this, continue to Step 5.
+**If NOT Step Manual Approve mode or NOT awaiting-approval:** Skip this, continue to Step 5.
 
 ---
 
@@ -114,8 +117,8 @@ AskUserQuestion:
   question: "How should I run implementer/verifier?"
   header: "Execution Method"
   options:
-    - "Subagent Mode - I dispatch as Agent() (faster, hands-off)"
-    - "Manual Mode - I invoke Skill() in this session (transparent)"
+    - "Subagent - I dispatch as Agent() (faster, hands-off)"
+    - "Current Session - I invoke Skill() in this session (transparent)"
 ```
 
 **THEN execute based on choice:**
@@ -183,7 +186,7 @@ Your step is complete when:
 4. If verification: status should be `complete` or `needs-fix` now
 5. Loop back to Step 1 (to handle new status)
 
-#### Step 5b: Manual Mode
+#### Step 5b: Current Session
 
 Invoke skill in this session:
 
@@ -238,9 +241,9 @@ Skill(skill: "workflow:finalize")
 **ALWAYS follow Step 1-5 in EXACT order:**
 - ✅ Step 1: Read state first
 - ✅ Step 2: Show what comes next
-- ✅ Step 3: Confirm/change workflow mode
-- ✅ Step 4: Handle approval if Mode 1
-- ✅ Step 5: Choose execution method (Subagent or Manual) ONLY if implementer/verifier needed
+- ✅ Step 3: Confirm/change workflow mode (Step Manual Approve or Final Approve)
+- ✅ Step 4: Handle step approval if Step Manual Approve mode
+- ✅ Step 5: Choose execution method (Subagent or Current Session) ONLY if implementer/verifier needed
 
 **NEVER skip or reorder steps.**
 
@@ -248,37 +251,37 @@ Skill(skill: "workflow:finalize")
 - ❌ Skip progress.json validation (Step 1)
 - ❌ Skip showing what's next (Step 2)
 - ❌ Skip asking about mode (Step 3)
-- ❌ Skip approval question if Mode 1 (Step 4)
+- ❌ Skip approval question if Step Manual Approve mode (Step 4)
 - ❌ Choose execution method before showing state (Step 5)
 - ❌ Dispatch implementer/verifier without asking how (Step 5)
 
 ---
 
-## Example Flow: 3 Steps, Mode 1
+## Example Flow: 3 Steps, Step Manual Approve
 
 ```
 Start: /workflow:execute
 
 Step 1: Read state
-  → Step 1 pending, Mode 1, Workflow initialized
+  → Step 1 pending, Step Manual Approve mode, Workflow initialized
 
 Step 2: Show next
   → "Will implement step 1, then verify, then ask for approval"
 
 Step 3: Confirm mode
-  → "Is Mode 1 correct?" → User: Yes
+  → "Is Step Manual Approve correct?" → User: Yes
 
 Step 4: Check approval
   → Step 1 is pending, so skip approval
 
 Step 5: Ask execution method
-  → "Subagent or Manual?"
-  → User: Subagent Mode
+  → "Subagent or Current Session?"
+  → User: Subagent
   → Dispatch Agent(implementer step 1)
   → Agent returns, step status = verification
 
 Step 1 again: Read state
-  → Step 1 verification, Mode 1
+  → Step 1 verification, Step Manual Approve mode
 
 Step 2: Show next
   → "Will verify step 1, then ask for approval"
@@ -290,13 +293,13 @@ Step 4: Check approval
   → Step 1 is verification (not awaiting-approval yet), skip
 
 Step 5: Ask execution method
-  → "Subagent or Manual?"
-  → User: Subagent Mode
+  → "Subagent or Current Session?"
+  → User: Subagent
   → Dispatch Agent(verifier step 1)
   → Agent returns, step status = complete
 
 Step 1 again: Read state
-  → Step 1 complete, Mode 1
+  → Step 1 complete, Step Manual Approve mode
 
 Step 2: Show next
   → "Step 1 verified, will ask for approval"
