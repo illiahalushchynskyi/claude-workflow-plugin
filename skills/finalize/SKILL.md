@@ -11,9 +11,8 @@ Execute calls this skill after all steps verified complete and human approves fi
 
 ## When to Use
 
-- All steps complete in progress.json
-- PLAN.md status = "ready-for-review"
-- User has approved finalization
+- All steps complete in progress.json (all steps have status = "complete")
+- User has approved finalization (Mode 1: after last approval, Mode 2: at end of all steps)
 
 ## Your Procedure
 
@@ -47,16 +46,16 @@ jq ".completed = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" \
 
 ### Step 3: Update PLAN.md Status
 
-Edit `.workflow/${TASK_NAME}/PLAN.md` frontmatter:
+Edit `.workflow/${TASK_NAME}/PLAN.md` frontmatter `status` field only:
 
 ```yaml
 ---
-status: complete
-completed: {TODAY}
+status: completed
+created: {ORIGINAL_DATE}
 ---
 ```
 
-Add single line to body: `Workflow completed {DATE}. See progress.json for details.`
+Add single line to body: `Workflow completed. See progress.json for details.`
 
 ### Step 4: Create Final Commit
 
@@ -90,7 +89,8 @@ Ready for review/merge/deployment
 ## Success Criteria
 
 Finalize complete when:
-- ✅ progress.json has completion timestamp
-- ✅ PLAN.md status = "complete"
-- ✅ Final commit in git log
-- ✅ All workflow files clean in git
+- ✅ progress.json has completion timestamp (`completed` field set)
+- ✅ PLAN.md status = "completed"
+- ✅ PLAN.md has no other frontmatter changes (only status changed)
+- ✅ Final commit in git log with message: `workflow: complete {TASK_NAME}`
+- ✅ All workflow files clean in git (no uncommitted changes)

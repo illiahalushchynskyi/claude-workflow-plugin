@@ -27,22 +27,28 @@ DO NOT call this skill directly from main session.
 
 3. **Implement** code changes
    - Use Edit for existing files, Write for new files
-   - Run migrations if needed: use `${migrateCommand}` from config (if not null)
 
 4. **Test** - MANDATORY: Use `${testCommand}` from config
    - Must pass on all test frameworks (npm test, pytest, cargo test, go test, etc.)
    - Fix code or tests until all pass
    - Document results
 
-5. **Commit** - `git commit -m "Implement step {N}: {goal}"`
+5. **Run Migrations** (if applicable)
+   - If `migrateCommand` is set in config (not null): run `${migrateCommand}`
+   - Examples: `npm run migrate`, `sqlx migrate run`, `alembic upgrade head`, `python manage.py migrate`
+   - Migrations must succeed—if failed, fix migration files or code and retry
+   - Document migration results
 
-6. **Update Implementation section** in step-{N}.md
+6. **Commit** - `git commit -m "Implement step {N}: {goal}"`
+
+7. **Update Implementation section** in step-{N}.md
    - Files modified/created
    - Summary of changes
    - Test results (including which testCommand was used)
-   - Do NOT update status field
+   - Migration results (if migrations ran)
+   - Do NOT update status field (execute manages it)
 
-7. **Report** back to execute with brief summary
+8. **Report** back to execute with brief summary
 
 ## Files
 

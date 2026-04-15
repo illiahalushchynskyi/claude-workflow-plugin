@@ -89,8 +89,8 @@ See `progress.json` for detailed execution status and mode.
 **CRITICAL:** 
 - Do NOT add step lists or progress counters in PLAN.md. All tracking goes in progress.json.
 - Do NOT add mode to PLAN.md. Mode is selected when execute starts.
-- Only update `status` field in PLAN.md (execute manages this).
-- PLAN.md is human-readable summary; progress.json is system source of truth.
+- PLAN.md has only two frontmatter fields: `status` and `created` (execute updates status only).
+- PLAN.md is human-readable summary; progress.json is system source of truth for all execution state.
 
 ### Step 4: Generate step-N.md Files
 
@@ -100,8 +100,6 @@ For each step, create `.workflow/TASK_NAME/steps/step-N.md`:
 ---
 step_number: {N}
 name: {Step Name}
-status: pending
-iteration: 1
 created: {TODAY}
 ---
 
@@ -228,23 +226,13 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
       "name": "{Step 1 Name}",
       "status": "pending",
       "iteration": 1,
-      "implementation_start": null,
-      "implementation_end": null,
-      "verification_start": null,
-      "verification_end": null,
-      "awaiting_approval_since": null,
-      "approval_date": null
+      "awaiting_approval_since": null
     },
     "2": {
       "name": "{Step 2 Name}",
       "status": "pending",
       "iteration": 1,
-      "implementation_start": null,
-      "implementation_end": null,
-      "verification_start": null,
-      "verification_end": null,
-      "awaiting_approval_since": null,
-      "approval_date": null
+      "awaiting_approval_since": null
     }
   },
   "approvals": {
@@ -281,14 +269,9 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 
 **Step-level fields:**
 - `name` (string) - Step name from step-N.md frontmatter
-- `status` (string) - One of values above
-- `iteration` (number) - Current iteration number (increments when step is retried)
-- `implementation_start` (string|null) - ISO 8601 timestamp when implementer started
-- `implementation_end` (string|null) - ISO 8601 timestamp when implementer finished
-- `verification_start` (string|null) - ISO 8601 timestamp when verifier started
-- `verification_end` (string|null) - ISO 8601 timestamp when verification completed
-- `awaiting_approval_since` (string|null) - ISO 8601 timestamp when verification passed, waiting for approval (Mode 1 only)
-- `approval_date` (string|null) - ISO 8601 timestamp when manually approved (Mode 1 only)
+- `status` (string) - One of values above: pending, implementation, verification, awaiting-approval, needs-fix, complete
+- `iteration` (number) - Current iteration number (increments when step is retried after needs-fix)
+- `awaiting_approval_since` (string|null) - ISO 8601 timestamp when step entered awaiting-approval status (Mode 1 only, used to track pause state)
 
 **Approvals tracking:**
 - `approvals.mode_1_manual_approvals` (array) - History of user approvals in Mode 1
@@ -296,25 +279,25 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 
 **Key Points:**
 - All steps initialized to `pending` status, iteration 1
-- All timestamps are null at initialization
+- Workflow-level `started` and `completed` are null at initialization (set by execute/finalize)
 - `workflow_status` starts as `initialized`, becomes `in-progress` when first step starts
 - `current_step` points to the step being worked on (updated by execute on resume)
 - Workflow can be paused at `awaiting-approval` status (Mode 1) and resumed from same state
-- PLAN.md is human-facing summary (only status field); progress.json is system source of truth
-- This file is updated by workflow:execute, workflow:implementer, and workflow:verifier
+- PLAN.md is human-facing summary (only status and created fields); progress.json is system source of truth
+- progress.json is updated by workflow:execute (status, workflow_status, current_step, started/completed)
 - Mode 1: awaiting-approval triggers human decision; Mode 2: auto-completes after verification
 
 ### Step 7: Verify Files Created
 
 Verify:
-- [ ] PLAN.md exists with correct YAML frontmatter (status: pending, created date, title, description)
-- [ ] All step-N.md files exist with correct frontmatter
+- [ ] PLAN.md exists with correct YAML frontmatter (status: pending, created date, title, description only)
+- [ ] All step-N.md files exist with correct frontmatter (step_number, name, created only - NO status field)
 - [ ] progress.json is valid JSON:
   - workflow_status: "initialized"
   - mode: null (will be set by execute)
-  - All steps at "pending" status
-  - All timestamps are null
-  - All awaiting_approval_since are null
+  - All steps at "pending" status with iteration: 1
+  - workflow-level started and completed are null
+  - approvals.mode_1_manual_approvals is empty array
 - [ ] .workflow-config.json exists with taskName, projectType, buildCommand, testCommand, migrateCommand fields
 - [ ] buildCommand and testCommand are valid for detected projectType
 - [ ] No execution settings in .workflow-config.json (only project config)

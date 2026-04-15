@@ -62,9 +62,9 @@ Fail immediately if any step fails.
 
 Document: Docker verification results with service names.
 
-### 5. Migrations Check (if applicable)
+### 5. Migrations Verification (if applicable)
 
-Only check if `migrateCommand` is set in config. Check only—do NOT run migrations.
+Only check if `migrateCommand` is set in config. Implementer already ran migrations—verify they succeeded.
 
 If database is available (project uses one):
 ```bash
@@ -77,9 +77,9 @@ mysql -e "SELECT * FROM migrations"
 mysql -e "SHOW TABLES"
 ```
 
-For other databases, verify migration artifacts exist (sqlx_migrations, diesel migrations, alembic versions, etc).
+For other databases, verify migration artifacts exist and are up-to-date (sqlx_migrations, diesel migrations, alembic versions, etc).
 
-Fail if incomplete. Don't fix—report what's missing.
+If incomplete or failed: Fail verification and report which migrations are missing or in error state.
 
 ### 6. Run Tests
 
@@ -160,7 +160,7 @@ Report result (do NOT update step status—execute manages it):
 - ✅ Build project using buildCommand—fail if errors
 - ✅ Run tests using testCommand from config—fail if any fail
 - ✅ Handle language-specific test output (don't assume npm format)
-- ✅ Check migrations (if migrateCommand is set) - don't run them
+- ✅ Verify migrations were applied (if migrateCommand is set)—implementer already ran them
 - ✅ Verify docker (if docker-compose.yml exists) - language-independent
 - ✅ Manually test EACH criterion with evidence
 - ✅ Report clear PASS or FAIL

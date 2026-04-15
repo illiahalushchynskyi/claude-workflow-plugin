@@ -10,8 +10,8 @@ The Workflow System provides a structured framework for executing complex develo
 - **Verifier Agent** — tests changes and gates advancement to the next step
 
 All progress is tracked in two complementary files:
-- **PLAN.md** — Human-readable status summary (pending, in-progress, completed)
-- **progress.json** — System source of truth with detailed timestamps, approvals, and state transitions
+- **PLAN.md** — Human-readable status summary (only status and created date)
+- **progress.json** — System source of truth with step statuses, iterations, approvals, and workflow-level timestamps
 
 ## Key Features
 
@@ -30,11 +30,11 @@ All progress is tracked in two complementary files:
 
 ### Advanced Features
 
-- **Granular Progress Tracking** — progress.json tracks workflow status, step status, timestamps, iterations, approvals, and pause/resume state
+- **Granular Progress Tracking** — progress.json tracks workflow status, step status, iterations, approvals, and pause/resume state
 - **Pause & Resume Support** — Workflows can pause (awaiting approval in Mode 1) and resume from exact state without re-executing completed steps
 - **Schema Validation** — All PLAN.md and step files validated against JSON schemas
 - **Cross-Machine Portability** — File-based state, works on any machine with git and Claude Code
-- **Persistent Audit Trail** — Every iteration timestamped, all decisions recorded in progress.json
+- **Iteration Tracking** — When a step fails verification and needs fixes, iteration count increments; all approval decisions recorded in progress.json
 - **Issue Tracking & Fixes** — Verifier reports issues, implementer fixes in same cycle, iteration count increments
 - **Mode Flexibility** — Choose mode before work begins, applies to entire workflow
 
@@ -94,13 +94,14 @@ See [INSTALLATION.md](docs/INSTALLATION.md) for detailed setup and troubleshooti
 # Prompts you for:
 # - Task name (e.g., "feature-auth-system")
 # - Task description and requirements
-# - Mode selection (1 or 2)
-# - Number of steps
+# - Number of steps and their descriptions
+# - Acceptance criteria for each step
 
 # Creates:
 # .workflow/feature-auth-system/PLAN.md
+# .workflow/feature-auth-system/progress.json
 # .workflow/feature-auth-system/.workflow-config.json
-# .workflow/feature-auth-system/steps/step-1-*.md, step-2-*.md, etc.
+# .workflow/feature-auth-system/steps/step-1.md, step-2.md, etc.
 ```
 
 ### 2. Execute the Workflow
@@ -109,9 +110,13 @@ See [INSTALLATION.md](docs/INSTALLATION.md) for detailed setup and troubleshooti
 # Use the workflow:execute skill
 /workflow:execute
 
-# Reads your PLAN.md, determines mode, and:
-# - Mode 1: Pauses after each step for human approval
-# - Mode 2: Runs all steps, pauses only at the end
+# You will be asked to choose:
+# 1. Workflow mode (Step Manual Approve or Final Approve)
+# 2. Execution method (Subagent or Current Session)
+#
+# Then it orchestrates the workflow:
+# - Mode 1 (Step Manual Approve): Pauses after each step for your approval
+# - Mode 2 (Final Approve): Runs all steps, pauses only at the end
 ```
 
 ### 3. View Progress and Approve

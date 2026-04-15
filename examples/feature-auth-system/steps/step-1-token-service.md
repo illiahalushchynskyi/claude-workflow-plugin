@@ -1,19 +1,7 @@
 ---
 step_number: 1
 name: Create Token Generation Service
-status: pending
-iteration: 1
-created: 2026-04-08T10:00:00Z
-started: null
-completed: null
-estimated_effort: medium
-blocked: false
-blocked_reason: null
-tags:
-  - authentication
-  - core
-  - backend
-depends_on: []
+created: 2026-04-08
 ---
 
 # Step 1: Create Token Generation Service
@@ -24,53 +12,36 @@ Create a reusable `TokenService` that generates JWT tokens with proper structure
 expiration, and verification. This service is the foundation for all authentication
 in the system.
 
-## Verification Criteria
+## Acceptance Criteria
 
-- [ ] `TokenService.sign()` creates valid JWT tokens
-- [ ] Token payload includes `userId` and `role` fields
-- [ ] Tokens expire after 7 days (configurable via JWT_EXPIRY env var)
-- [ ] Token can be verified with `TokenService.verify()`
-- [ ] Verification throws error for invalid tokens
-- [ ] Verification throws error for expired tokens
-- [ ] Uses HS256 algorithm with `JWT_SECRET` from environment
-- [ ] All TypeScript type definitions present (no `any` types)
-- [ ] All unit tests pass
-- [ ] No TypeScript compilation errors
-- [ ] Code follows project conventions (eslint passes)
+Each criterion must be testable and independently verifiable.
+
+- **Token Creation:** `TokenService.sign(userId, role)` creates valid JWT tokens with HS256 algorithm
+- **Token Payload:** Token payload includes `userId` and `role` fields, verified via `TokenService.decode()`
+- **Token Expiration:** Tokens expire after 7 days; `TokenService.verify()` throws error on expired tokens
+- **Token Verification:** `TokenService.verify(token)` successfully verifies valid tokens and returns correct payload
+- **Invalid Token Handling:** `TokenService.verify()` throws error for invalid or tampered tokens
+- **Environment Config:** JWT_SECRET loaded from environment; JWT_EXPIRY configurable (default: 7d)
+- **Type Safety:** All TypeScript types strict (no `any` types); full type definitions present
+- **Unit Tests:** All unit tests pass, covering: creation, verification, expiry, invalid tokens, tampering
+- **Build Success:** No TypeScript compilation errors; project builds successfully
+- **Code Quality:** Code follows project conventions; linter (eslint) passes
 
 ## Implementation
 
 ### Files to Modify/Create
 
-- Create: `backend/src/services/TokenService.ts`
-- Create: `backend/src/types/auth.ts`
-- Modify: `backend/src/server.ts` (optional: add TokenService to DI)
-- Create: `backend/src/services/__tests__/TokenService.test.ts`
+[To be filled by implementer during execution]
 
 ### Implementation Notes
 
-**Implementer**: [Will be filled in during execution]
-
-**Timestamp**: [Will be filled in during execution]
-
-[Implementation notes will be added as work progresses]
+[Summary of changes, test results, and any implementation decisions will be added by implementer]
 
 ## Verification
 
 ### Verification Notes
 
-**Verifier**: [Will be filled in during execution]
-
-**Timestamp**: [Will be filled in during execution]
-
-**Result**: [PENDING]
-
-[Verification notes will be added after testing]
-
----
-
-**History**: 
-- Iteration 1: [To be updated during execution]
+[Build results, test results, criterion verification evidence, and any issues found will be added by verifier]
 
 ---
 

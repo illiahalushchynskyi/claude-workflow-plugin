@@ -17,9 +17,10 @@ Execute manages workflow state and coordinates step execution in strict order.
 
 1. Check progress.json exists (if not: STOP, tell user to run `/workflow:bootstrap`)
 2. Read `.workflow/{TASK_NAME}/PLAN.md` (title, description, created date)
-3. Read `.workflow/{TASK_NAME}/progress.json` (step statuses, workflow_status, mode)
+3. Read `.workflow/{TASK_NAME}/progress.json` — **THIS IS THE SOURCE OF TRUTH**
+   - Extract: task_name, mode, workflow_status, current_step, all step statuses
 4. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
-5. Find first step with status ≠ "complete"
+5. Find current step (progress.json current_step) and its status
 6. Check if mode is set in progress.json:
    - If mode is null → will ask user in Step 3
    - If mode is set → continue to Step 2
@@ -28,10 +29,11 @@ Execute manages workflow state and coordinates step execution in strict order.
 ```
 Current state:
 - Workflow: {TASK_NAME}
-- Mode: {Step Manual Approve or Final Approve}
+- Mode: {Step Manual Approve or Final Approve} (or 'Not set' if null)
 - Current step: {N} ({STEP_NAME})
 - Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
 - Workflow status: {initialized/in-progress/paused/completed}
+- Iteration: {current iteration count}
 ```
 
 ---
@@ -186,11 +188,12 @@ Your step is complete when:
 ```
 
 **After Agent returns:**
-1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md`
-2. Check frontmatter `status:` field
-3. If implementation: status should be `verification` now
-4. If verification: status should be `complete` or `needs-fix` now
-5. Loop back to Step 1 (to handle new status)
+1. Read `.workflow/{TASK_NAME}/progress.json` to check new status
+2. Update step status in progress.json based on what agent did:
+   - If implementing: set status = `verification`, increment iteration if needed
+   - If verifying: set status = `complete` or `needs-fix` (agent reports which)
+3. If Mode 1 and step now complete: set `awaiting_approval_since` to current timestamp
+4. Loop back to Step 1 (to handle new status)
 
 #### Step 5b: Current Session
 
@@ -222,9 +225,11 @@ The skill will guide user to:
 - Set status = `complete` or `needs-fix`
 
 **After Skill returns:**
-1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md`
-2. Check frontmatter `status:` field
-3. Verify status changed correctly
+1. Read `.workflow/{TASK_NAME}/progress.json` to check new status
+2. Verify status changed correctly:
+   - After implementer: should be `verification` now (or `needs-fix` if failed)
+   - After verifier: should be `complete` or `needs-fix` now
+3. If Mode 1 and step now complete: set `awaiting_approval_since` to current timestamp
 4. Loop back to Step 1 (to handle new status)
 
 ---
