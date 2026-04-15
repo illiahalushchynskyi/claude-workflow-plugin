@@ -39,14 +39,22 @@ Use `workflow:execute` when:
 
 1. **Load progress.json** - Find first non-complete step
 2. **Update workflow status** - Set workflow_status to `in-progress` and set `started` timestamp if first run
-3. **Ask user** - Confirm start/resume before executing
-4. **Main loop** - Execute until all steps complete:
-   - If status is `pending` or `needs-fix` → Dispatch implementer (as subagent)
-   - If status is `implementation` → Dispatch implementer (subagent still working)
-   - If status is `verification` → Dispatch verifier (as subagent)
-   - If status is `awaiting-approval` → Ask user for approval (Mode 1 only)
-   - If status is `complete` → Skip to next step
-   - If all steps complete → Finalize (direct invocation)
+3. **Ask user** - Choose execution mode:
+   - **Subagent Mode:** Automatic Agent dispatch (recommended, no manual work)
+   - **Manual Mode:** Guide user to invoke skills directly (more control)
+4. **Main loop** - Execute until all steps complete (behavior depends on mode):
+   - **Subagent Mode:**
+     - If status is `pending` or `needs-fix` → Dispatch implementer Agent subagent
+     - If status is `verification` → Dispatch verifier Agent subagent
+     - If status is `awaiting-approval` → Ask user for approval (Mode 1 only)
+     - If status is `complete` → Skip to next step
+     - If all steps complete → Finalize
+   - **Manual Mode:**
+     - If status is `pending` or `needs-fix` → Guide user: "Run `/workflow:implementer` to implement step"
+     - If status is `verification` → Guide user: "Run `/workflow:verifier` to verify step"
+     - If status is `awaiting-approval` → Ask user for approval (Mode 1 only)
+     - If status is `complete` → Skip to next step
+     - If all steps complete → Guide user: "Run `/workflow:finalize` to complete"
 5. **On completion** - Set workflow_status to `completed` and `completed` timestamp
 6. **On pause** - Set workflow_status to `paused` (when awaiting approval)
 
@@ -72,19 +80,51 @@ If resuming after pause (workflow_status == "paused"):
 2. Keep `started` timestamp unchanged
 3. Keep PLAN.md status as `in-progress`
 
-### Ask User Confirmation
+### Step 3a: Ask Execution Mode
 
-Before dispatching any subagents:
+First, ask user about execution mode:
 
 ```
 AskUserQuestion:
-  question: "Start workflow from step {N}?"
+  question: "How should implementer and verifier work?"
+  header: "Execution Mode"
   options:
-    - "Yes, proceed"
+    - label: "Subagent Mode (Recommended)"
+      description: "I dispatch implementer/verifier as isolated subagents via Agent(). You handle orchestration only."
+    - label: "Manual Mode"
+      description: "I guide you to run workflow:implementer and workflow:verifier directly. You invoke each skill manually."
+```
+
+**If Subagent Mode:** Continue to step 3b (auto-dispatch)
+**If Manual Mode:** Continue to step 3c (guided manual execution)
+
+### Step 3b: Ask Workflow Start Confirmation (Subagent Mode)
+
+If user chose Subagent Mode:
+
+```
+AskUserQuestion:
+  question: "Start workflow from step {N} (Mode {MODE}, Subagent auto-dispatch)?"
+  options:
+    - "Yes, dispatch subagents"
     - "No, stop"
 ```
 
-**If No:** STOP. **If Yes:** Continue to main loop.
+**If No:** STOP. **If Yes:** Continue to main loop (subagent dispatch).
+
+### Step 3c: Ask Workflow Start Confirmation (Manual Mode)
+
+If user chose Manual Mode:
+
+```
+AskUserQuestion:
+  question: "Start workflow from step {N} (Mode {MODE}, manual invocation)?"
+  options:
+    - "Yes, I'll run skills manually"
+    - "No, stop"
+```
+
+**If No:** STOP. **If Yes:** Continue to main loop (guided manual execution).
 
 ### Main Loop Logic
 
@@ -210,6 +250,62 @@ You are a subagent verifying step {N} of {TASK_NAME}.
 4. If status == `needs-fix`: Loop back to dispatch implementer again
 5. If status != `complete` AND != `needs-fix`: Ask user for guidance
 
+### Manual Mode Execution - GUIDED STEP INVOCATION
+
+When user chooses Manual Mode, you guide them through manual invocation instead of dispatching agents.
+
+**When step status is `pending` or `needs-fix`:**
+
+Ask user:
+```
+AskUserQuestion:
+  question: "Ready to implement step {N}: {STEP_NAME}?"
+  options:
+    - "Yes, I'll run /workflow:implementer"
+    - "No, pause here"
+```
+
+**If user chooses to implement:**
+1. Tell user: "Now run: `/workflow:implementer`"
+2. User will:
+   - Load skill and follow procedure
+   - Invoke the skill themselves
+   - Update step file with status = `verification`
+3. You wait for user confirmation: "Have you run `/workflow:implementer`?"
+4. When confirmed, read step-{N}.md to check status
+5. If status == `verification`: Continue to next section
+6. If status != `verification`: Ask user for guidance
+
+**When step status is `verification`:**
+
+Ask user:
+```
+AskUserQuestion:
+  question: "Ready to verify step {N}: {STEP_NAME}?"
+  options:
+    - "Yes, I'll run /workflow:verifier"
+    - "No, pause here"
+```
+
+**If user chooses to verify:**
+1. Tell user: "Now run: `/workflow:verifier`"
+2. User will:
+   - Load skill and follow procedure
+   - Invoke the skill themselves
+   - Update step file with status = `complete` or `needs-fix`
+3. You wait for user confirmation: "Have you run `/workflow:verifier`?"
+4. When confirmed, read step-{N}.md to check status
+5. If status == `complete`: Continue to next step (or approval if Mode 1)
+6. If status == `needs-fix`: Loop back to implementation
+7. If status != `complete` AND != `needs-fix`: Ask user for guidance
+
+**Manual Mode Summary:**
+- You guide step-by-step
+- User invokes skills directly
+- You read files to verify completion
+- User has full control and visibility
+- Slower than Subagent Mode but more transparent
+
 ### Mode 1: Awaiting Approval
 
 When a step is in `awaiting-approval` status:
@@ -264,9 +360,13 @@ Result:
 
 ---
 
-## Subagent Dispatch Rules - STRICT ENFORCEMENT
+## Execution Rules - Two Modes
 
-### implementer - ALWAYS Subagent (NEVER Direct Skill)
+### Mode A: Subagent Mode (Recommended)
+
+You dispatch agents automatically. Implementer and Verifier run as isolated subagents.
+
+#### implementer - ALWAYS Subagent (NEVER Direct Skill)
 
 **CORRECT:**
 ```python
@@ -334,44 +434,154 @@ Skill(skill: "workflow:finalize")  # OK - Main session direct
 
 ---
 
-## Critical Rules - YOU ARE THE ORCHESTRATOR, NOT THE WORKER
+### Mode B: Manual Mode
 
-**YOUR ROLE:**
-- You manage state files (PLAN.md, progress.json)
-- You dispatch agents (implementer, verifier)
-- You ask users for approval
-- You orchestrate the workflow
+You guide user step-by-step. User invokes skills directly, you coordinate and verify.
 
-**AGENTS' ROLE:**
-- implementer agent: writes code, runs tests, commits, updates step file
-- verifier agent: builds project, runs tests, verifies criteria, updates step file
-- You do NONE of this work yourself
+#### Manual Implementer Invocation
+
+When step status is `pending` or `needs-fix`:
+
+**You ask user:**
+```
+"Ready to implement step N? Run: /workflow:implementer"
+```
+
+**User does:**
+1. Runs `/workflow:implementer`
+2. Skill guides them through implementation
+3. They update step file with status = `verification`
+4. They confirm when done
+
+**You do:**
+1. Read step-{N}.md to verify status changed to `verification`
+2. If status == `verification`: Continue to verifier step
+3. If status != `verification`: Ask user for guidance
+
+#### Manual Verifier Invocation
+
+When step status is `verification`:
+
+**You ask user:**
+```
+"Ready to verify step N? Run: /workflow:verifier"
+```
+
+**User does:**
+1. Runs `/workflow:verifier`
+2. Skill guides them through verification
+3. They update step file with status = `complete` or `needs-fix`
+4. They confirm when done
+
+**You do:**
+1. Read step-{N}.md to verify status changed
+2. If status == `complete`: Continue to next step (or approval if Mode 1)
+3. If status == `needs-fix`: Go back to implementer step
+4. If status != `complete` AND != `needs-fix`: Ask user for guidance
+
+#### Manual Finalize Invocation
+
+When all steps are complete:
+
+**You ask user:**
+```
+"All steps done. Ready to finalize? Run: /workflow:finalize"
+```
+
+**User does:**
+1. Runs `/workflow:finalize`
+2. Skill creates final commit
+3. Updates PLAN.md to `complete`
+4. They confirm when done
+
+**You do:**
+1. Verify PLAN.md status is `complete`
+2. Confirm workflow is finished
+
+#### Manual Mode Rules
+
+**CORRECT pattern:**
+```
+You → "Run /workflow:implementer"
+User → Runs it
+You → Read step file to verify status
+```
+
+**Advantages:**
+- ✅ User has full visibility and control
+- ✅ User invokes skills directly
+- ✅ Clear step-by-step guidance
+- ✅ More transparent process
+
+**Disadvantages:**
+- ❌ More manual work for user
+- ❌ Slower execution
+- ❌ More back-and-forth
 
 ---
 
-**MUST DO:**
+## Critical Rules - YOU ARE THE ORCHESTRATOR, NOT THE WORKER
+
+**YOUR ROLE (in BOTH modes):**
+- Read and manage state files (PLAN.md, progress.json)
+- Coordinate workflow execution (Subagent Mode or Manual Mode)
+- Ask users for approval and guidance
+- Verify step completion by reading files
+- Handle transitions between steps
+
+**SUBAGENT MODE - Agent Dispatch:**
+- You dispatch implementer Agent (it does the work)
+- You dispatch verifier Agent (it does the work)
+- You wait for agents to complete
+- You read files to verify status changed
+
+**MANUAL MODE - User Guidance:**
+- You guide user to run `/workflow:implementer`
+- You guide user to run `/workflow:verifier`
+- You wait for user confirmation
+- You read files to verify status changed
+
+**NEITHER MODE:**
+- ❌ You do NOT write code yourself
+- ❌ You do NOT run tests yourself
+- ❌ You do NOT call Skill() directly for implementer/verifier (Subagent Mode only)
+
+---
+
+**MUST DO (Both Modes):**
 - ✅ Read PLAN.md, progress.json, and .workflow-config.json first (YOU do this)
 - ✅ Set workflow_status and timestamps in progress.json (YOU do this)
 - ✅ Extract projectType, buildCommand, testCommand, migrateCommand from config (YOU do this)
-- ✅ Ask user via AskUserQuestion before dispatching first Agent()
+- ✅ Ask user via AskUserQuestion: "Subagent Mode or Manual Mode?"
+- ✅ Handle awaiting-approval status correctly (Mode 1 vs Mode 2)
+- ✅ Set paused status when awaiting approval, resume when approval given
+- ✅ Read step-N.md to verify completion status changed
+- ✅ Handle failures gracefully
+
+**MUST DO (Subagent Mode only):**
 - ✅ Use Agent(subagent_type="general-purpose") for implementer and verifier
 - ✅ Include `Invoke: Skill(skill: "workflow:implementer")` in implementer Agent prompt
 - ✅ Include `Invoke: Skill(skill: "workflow:verifier")` in verifier Agent prompt
 - ✅ Wait for Agent() to return completely
 - ✅ Read step-N.md to verify subagent updated status field
-- ✅ Handle awaiting-approval status correctly (Mode 1 vs Mode 2)
-- ✅ Set paused status when awaiting approval, resume when approval given
-- ✅ Handle failures gracefully
 
-**NEVER DO:**
-- ❌ Skip initial AskUserQuestion
-- ❌ Write code or make changes yourself (that's implementer's job)
-- ❌ Run tests or build yourself (that's verifier's job)
-- ❌ Modify step files directly (agents update them via skills)
-- ❌ Call `Skill(skill: "workflow:implementer")` directly—always dispatch via Agent()
-- ❌ Call `Skill(skill: "workflow:verifier")` directly—always dispatch via Agent()
+**MUST DO (Manual Mode only):**
+- ✅ Ask user: "Ready to run `/workflow:implementer`?"
+- ✅ Ask user: "Ready to run `/workflow:verifier`?"
+- ✅ Wait for user confirmation
+- ✅ Read step-N.md to verify user updated status field
+
+**NEVER DO (Both Modes):**
+- ❌ Skip initial mode selection question
+- ❌ Write code or make changes yourself (implementer's job)
+- ❌ Run tests or build yourself (verifier's job)
+- ❌ Modify step files directly (agents/users update them)
 - ❌ Assume success without reading updated step files
 - ❌ Dispatch multiple agents in parallel (go sequentially)
+
+**NEVER DO (Subagent Mode only):**
+- ❌ Call `Skill(skill: "workflow:implementer")` directly—always dispatch via Agent()
+- ❌ Call `Skill(skill: "workflow:verifier")` directly—always dispatch via Agent()
 - ❌ Include full skill procedure inline in prompt (use `Invoke: Skill()` instead)
 
 ---
