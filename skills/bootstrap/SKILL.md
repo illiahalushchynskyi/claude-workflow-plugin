@@ -65,7 +65,6 @@ Create `.workflow/TASK_NAME/PLAN.md` as human-facing summary only:
 ```yaml
 ---
 status: pending
-mode: {MODE}
 created: 2026-04-14
 ---
 
@@ -73,9 +72,13 @@ created: 2026-04-14
 
 {Task description}
 
-## Workflow Status
+## Workflow Execution
 
-See `.workflow-config.json` and `progress.json` for detailed execution status.
+**Mode is selected at runtime when you run `/workflow:execute`**
+- Step Manual Approve - approve each step after verification
+- Final Approve - approve once at the end
+
+See `progress.json` for detailed execution status and mode.
 ```
 
 **PLAN.md Status Values:**
@@ -85,6 +88,7 @@ See `.workflow-config.json` and `progress.json` for detailed execution status.
 
 **CRITICAL:** 
 - Do NOT add step lists or progress counters in PLAN.md. All tracking goes in progress.json.
+- Do NOT add mode to PLAN.md. Mode is selected when execute starts.
 - Only update `status` field in PLAN.md (execute manages this).
 - PLAN.md is human-readable summary; progress.json is system source of truth.
 
@@ -187,19 +191,22 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
   "projectType": "{DETECTED_TYPE}",
   "buildCommand": "{BUILD_COMMAND}",
   "testCommand": "{TEST_COMMAND}",
-  "migrateCommand": null,
-  "commitStyle": "conventional",
-  "push": false
+  "migrateCommand": null
 }
 ```
 
-**Field Definitions:**
-- `projectType` (string) - Detected or user-specified language/framework (node, php, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
-- `buildCommand` (string) - Command to build the project (e.g., `npm run build`, `cargo build --release`)
-- `testCommand` (string) - Command to run tests (e.g., `npm test`, `pytest`)
-- `migrateCommand` (string|null) - Command to run migrations, if applicable (e.g., `npm run migrate`, `sqlx migrate run`)
+**Field Definitions (Project Configuration Only):**
+- `taskName` (string) - Task identifier, matches directory name
+- `projectType` (string) - Language/framework: node, php, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other
+- `buildCommand` (string) - Command to build project (e.g., `npm run build`, `cargo build --release`, `go build ./...`)
+- `testCommand` (string) - Command to run tests (e.g., `npm test`, `pytest`, `cargo test`, `go test ./...`)
+- `migrateCommand` (string|null) - Command to run migrations if applicable (e.g., `npm run migrate`, `sqlx migrate run`, `alembic upgrade head`)
 
-These commands are used by implementer and verifier subagents instead of assuming npm/node.
+**CRITICAL:**
+- .workflow-config.json is for **project configuration ONLY** (how to build/test this codebase)
+- Do NOT add workflow execution settings here (mode, approval strategy, etc.)
+- Do NOT add metadata that duplicates PLAN.md or progress.json
+- These commands are used by implementer and verifier instead of assuming npm/node
 
 ### Step 6: Initialize progress.json
 
@@ -210,7 +217,7 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 ```json
 {
   "task_name": "{TASK_NAME}",
-  "mode": {1|2},
+  "mode": null,
   "workflow_status": "initialized",
   "created": "{TODAY}",
   "started": null,
@@ -250,11 +257,14 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 
 **Top-level workflow fields:**
 - `task_name` (string) - Task identifier, matches directory name
-- `mode` (number) - Execution mode: 1 for Step-by-Step (manual approval), 2 for End-to-End (automated)
+- `mode` (number|null) - Workflow approval mode (null at init, set by execute at runtime):
+  - `null` - Not yet set (waiting for execute to ask user)
+  - `2` - Final Approve (approve only at end of all steps)
+  - `1` - Step Manual Approve (approve each step before next)
 - `workflow_status` (string) - Overall workflow status: `initialized`, `in-progress`, `paused`, `completed`
-  - `initialized` - Created but not started
-  - `in-progress` - Currently executing steps
-  - `paused` - Waiting (human approval in Mode 1, or error)
+  - `initialized` - Created but not started (mode is null)
+  - `in-progress` - Currently executing steps (mode is set)
+  - `paused` - Waiting for approval (Step Manual Approve mode only)
   - `completed` - All steps verified and complete
 - `created` (string) - Task creation date in YYYY-MM-DD format
 - `started` (string|null) - ISO 8601 timestamp when first step began
@@ -297,15 +307,17 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking 
 ### Step 7: Verify Files Created
 
 Verify:
-- [ ] PLAN.md exists with correct YAML frontmatter (status: pending, mode)
+- [ ] PLAN.md exists with correct YAML frontmatter (status: pending, created date, title, description)
 - [ ] All step-N.md files exist with correct frontmatter
 - [ ] progress.json is valid JSON:
   - workflow_status: "initialized"
+  - mode: null (will be set by execute)
   - All steps at "pending" status
   - All timestamps are null
   - All awaiting_approval_since are null
-- [ ] .workflow-config.json exists with projectType, buildCommand, testCommand, migrateCommand fields
+- [ ] .workflow-config.json exists with taskName, projectType, buildCommand, testCommand, migrateCommand fields
 - [ ] buildCommand and testCommand are valid for detected projectType
+- [ ] No execution settings in .workflow-config.json (only project config)
 
 ### Step 8: Report to User
 
