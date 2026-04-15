@@ -1,7 +1,7 @@
 {
   "name": "workflow",
-  "version": "1.0.0",
-  "description": "Workflow system for AI-driven development with two-mode task orchestration (step-by-step or end-to-end) and persistent file-based state tracking",
+  "version": "1.1.0",
+  "description": "Workflow system for AI-driven development with dual execution modes (Subagent/Current Session), two approval strategies (Step Manual Approve/Final Approve), and persistent file-based state tracking",
   "author": "AI Development Team",
   "license": "MIT",
   "keywords": [
@@ -28,7 +28,7 @@
     },
     {
       "name": "workflow:execute",
-      "description": "Orchestrate workflow execution - manages mode selection and step sequencing (Mode 1 or 2)"
+      "description": "Orchestrate workflow execution - reads state, confirms mode, handles approvals, chooses execution method (Subagent or Current Session)"
     },
     {
       "name": "workflow:finalize",
