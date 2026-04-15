@@ -23,19 +23,45 @@ You manage workflow state and coordinate step execution. Choose your execution m
 ## When to Use
 
 Use `/workflow:execute` when:
-- Workflow has been bootstrapped (PLAN.md exists)
-- User wants to start or resume execution
-- PLAN.md status is `pending` or `in-progress`
-- Resuming from pause (e.g., after Mode 1 approval)
+- ✅ Workflow has been bootstrapped (PLAN.md exists)
+- ✅ progress.json exists (created by bootstrap)
+- ✅ All step-N.md files exist
+- ✅ User wants to start or resume execution
+- ✅ PLAN.md status is `pending` or `in-progress`
+- ✅ Resuming from pause (e.g., after Mode 1 approval)
+
+**REQUIRED:** If progress.json doesn't exist, STOP and tell user to run `/workflow:bootstrap`
 
 ---
 
 ## Procedure
 
+### Step 0: Validate progress.json Exists
+
+Before doing anything, check if progress.json exists:
+
+```bash
+if [ ! -f ".workflow/{TASK_NAME}/progress.json" ]; then
+  # progress.json missing - STOP, cannot proceed
+  echo "❌ ERROR: progress.json not found"
+  echo ".workflow/{TASK_NAME}/progress.json is required"
+  echo "Ensure workflow was created with: /workflow:bootstrap"
+  exit 1
+fi
+```
+
+**If progress.json is missing:**
+- ❌ STOP execution
+- Tell user: "Workflow not properly initialized. Run `/workflow:bootstrap` first."
+- Do NOT create progress.json yourself
+- Do NOT continue
+
+**If progress.json exists:** Continue to Step 1.
+
 ### Step 1: Load State
 
 1. Read `.workflow/{TASK_NAME}/PLAN.md` (mode, status)
-2. Read `.workflow/{TASK_NAME}/progress.json` (step statuses)
+2. Read `.workflow/{TASK_NAME}/progress.json` (step statuses) ← Now guaranteed to exist
 3. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
 4. Find first step with status ≠ "complete"
 
@@ -183,6 +209,12 @@ Then:
 
 ## Critical Rules
 
+**BEFORE ANYTHING ELSE:**
+- ✅ Check Step 0: **progress.json MUST exist**
+- ✅ If missing → STOP and tell user to run `/workflow:bootstrap`
+- ❌ Do NOT create progress.json yourself
+- ❌ Do NOT try to proceed without progress.json
+
 **YOU ARE THE ORCHESTRATOR:**
 - ✅ Read state files (PLAN.md, progress.json, .workflow-config.json)
 - ✅ Coordinate step execution (Subagent or Manual mode)
@@ -199,6 +231,8 @@ Then:
 - Manual: `Skill(workflow:implementer)` then `Skill(workflow:verifier)`
 
 **NEVER:**
+- ❌ Skip progress.json validation (Step 0)
+- ❌ Create progress.json if missing
 - ❌ Skip mode selection question
 - ❌ Write code yourself
 - ❌ Run tests yourself
@@ -210,6 +244,8 @@ Then:
 
 ```
 /workflow:execute
+↓
+Step 0: Check progress.json exists? ✓ Yes
 ↓
 Load state: Step 1 pending, Mode 1
 ↓
@@ -247,6 +283,8 @@ Done
 ```
 /workflow:execute
 ↓
+Step 0: Check progress.json exists? ✓ Yes
+↓
 Load state: Step 1 pending, Mode 1
 ↓
 Ask: "Subagent Mode or Manual Mode?"
@@ -272,6 +310,36 @@ All steps complete
 Skill(finalize) [I run it here]
 ↓
 Done
+```
+
+---
+
+## Example: Error - progress.json Missing
+
+```
+/workflow:execute
+↓
+Step 0: Check progress.json exists? ❌ NO
+↓
+❌ ERROR: progress.json not found
+.workflow/{TASK_NAME}/progress.json is required
+
+Ensure workflow was created with: /workflow:bootstrap
+
+[STOP - Do NOT continue]
+```
+
+**User sees:**
+```
+Workflow not properly initialized.
+
+Please run: /workflow:bootstrap
+
+This will create:
+- PLAN.md
+- progress.json
+- step-1.md, step-2.md, etc.
+- .workflow-config.json
 ```
 
 ---
