@@ -16,11 +16,13 @@ Execute manages workflow state and coordinates step execution in strict order.
 ### Step 1: Read Current State
 
 1. Check progress.json exists (if not: STOP, tell user to run `/workflow:bootstrap`)
-2. Read `.workflow/{TASK_NAME}/PLAN.md` (mode: Step Manual Approve or Final Approve)
-3. Read `.workflow/{TASK_NAME}/progress.json` (step statuses, workflow_status)
+2. Read `.workflow/{TASK_NAME}/PLAN.md` (title, description, created date)
+3. Read `.workflow/{TASK_NAME}/progress.json` (step statuses, workflow_status, mode)
 4. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
 5. Find first step with status ≠ "complete"
-6. Determine what was last done and what's next
+6. Check if mode is set in progress.json:
+   - If mode is null → will ask user in Step 3
+   - If mode is set → continue to Step 2
 
 **Output to user:**
 ```
@@ -55,27 +57,31 @@ Mode 2: After implementer finishes → Verifier tests → Automatic next step (n
 
 ---
 
-### Step 3: Ask About Workflow Mode (only if needed)
+### Step 3: Ask About Workflow Mode (if mode not set)
 
-**Ask user:**
+**If progress.json mode is null (first execution):**
+
 ```
 AskUserQuestion:
-  question: "Is {current mode} correct?"
+  question: "How should approval work?"
   header: "Workflow Mode"
   options:
-    - "Yes, {current mode} is correct"
-    - "Change to {other mode}"
+    - "Step Manual Approve - I approve each step before moving to next"
+    - "Final Approve - I approve once at the end"
 ```
 
-**Modes:**
-- Step Manual Approve = Approve each step after verifier finishes (before moving to next)
-- Final Approve = Approve only at the end of all steps
+**Modes Explained:**
+- **Step Manual Approve**: After verifier tests each step → you approve → next step
+- **Final Approve**: After all steps verified → you approve all at once
 
-**If user wants to change:**
-- Update PLAN.md: mode field
-- Update progress.json: mode field
+**If user chooses a mode:**
+- Update progress.json: `mode` field = 1 or 2
+- Update progress.json: `workflow_status` = "in-progress"
 
-**Then continue with chosen mode.**
+**If progress.json mode already set (resuming):**
+- Skip this step, use existing mode
+
+**Then continue with chosen/existing mode.**
 
 ---
 
