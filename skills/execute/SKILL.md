@@ -23,7 +23,28 @@ Execute manages workflow state and coordinates step execution in strict order.
 5. Find current step (progress.json current_step) and its status
 6. Check if mode is set in progress.json:
    - If mode is null → will ask user in Step 3
-   - If mode is set → continue to Step 2
+   - If mode is set → continue to Step 1.5
+
+### Step 1.5: Confirm Subagent Execution (First Run Only)
+
+**If workflow_status is "initialized" (first execution):**
+
+This workflow uses subagents for implementation and verification. Subagents are isolated AI agents that will execute steps independently.
+
+```
+AskUserQuestion:
+  question: "This workflow will use subagents for implementation and verification. Continue?"
+  header: "Subagent Confirmation"
+  options:
+    - "Agree - Continue with subagent execution"
+    - "Stop - Cancel workflow execution"
+```
+
+**If user agrees:**
+- Continue to Step 2
+
+**If user stops:**
+- Exit workflow, user can run `/workflow:execute` again later if they change their mind
 
 **Output to user:**
 ```
@@ -39,6 +60,8 @@ Current state:
 ---
 
 ### Step 2: Show What Will Happen Next
+
+(Updated to Step 2 after Step 1.5)
 
 Based on current step status, tell user what comes next:
 
@@ -113,27 +136,13 @@ AskUserQuestion:
 
 ---
 
-### Step 5: Choose Execution Method (ONLY if implementer or verifier needed)
+### Step 5: Execute with Subagent
 
-**Only ask Step 5 if:**
+**Execute ONLY if:**
 - Step status is `pending` or `needs-fix` (need to implement)
 - Step status is `verification` (need to verify)
 
-**Ask user:**
-```
-AskUserQuestion:
-  question: "How should I run implementer/verifier?"
-  header: "Execution Method"
-  options:
-    - "Subagent - I dispatch as Agent() (faster, hands-off)"
-    - "Current Session - I invoke Skill() in this session (transparent)"
-```
-
-**THEN execute based on choice:**
-
-#### Step 5a: Subagent Mode
-
-Dispatch as isolated Agent subagent:
+Workflow uses subagents for execution. Dispatch isolated Agent subagent:
 
 **If implementing (step status = pending/needs-fix):**
 ```python
@@ -197,45 +206,6 @@ Your step is complete when:
 3. If Mode 1 and step is now `complete`: set `awaiting_approval_since` to current ISO8601 timestamp
 4. Loop back to Step 1 (to handle new status)
 
-#### Step 5b: Current Session
-
-Invoke skill in this session:
-
-**If implementing (step status = pending/needs-fix):**
-```python
-Skill(skill: "workflow:implementer")
-```
-
-The skill will guide user to:
-- Read step-{N}.md goal
-- Implement code changes
-- Run tests (must pass)
-- Commit changes
-- Update step-{N}.md Implementation section
-- Set status = `verification`
-
-**If verifying (step status = verification):**
-```python
-Skill(skill: "workflow:verifier")
-```
-
-The skill will guide user to:
-- Build project
-- Run tests (must all pass)
-- Verify acceptance criteria
-- Update step-{N}.md Verification section
-- Set status = `complete` or `needs-fix`
-
-**After Skill returns:**
-1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md` Implementation or Verification section to see what was done
-   - Check if implementation section is filled (code completed)
-   - Check if verification section is filled with PASS/FAIL results
-2. Update progress.json step status:
-   - If implementer just finished: set status = `verification`
-   - If verifier just finished: set status = `complete` (if all criteria pass) or `needs-fix` (if any fail)
-3. If Mode 1 and step is now `complete`: set `awaiting_approval_since` to current ISO8601 timestamp
-4. Loop back to Step 1 (to handle new status)
-
 ---
 
 ## Loop Until Complete
@@ -255,20 +225,21 @@ Skill(skill: "workflow:finalize")
 
 **ALWAYS follow Step 1-5 in EXACT order:**
 - ✅ Step 1: Read state first
+- ✅ Step 1.5: Confirm subagent execution (first run only)
 - ✅ Step 2: Show what comes next
 - ✅ Step 3: Confirm/change workflow mode (Step Manual Approve or Final Approve)
 - ✅ Step 4: Handle step approval if Step Manual Approve mode
-- ✅ Step 5: Choose execution method (Subagent or Current Session) ONLY if implementer/verifier needed
+- ✅ Step 5: Execute with subagent ONLY if implementer/verifier needed
 
 **NEVER skip or reorder steps.**
 
 **NEVER:**
 - ❌ Skip progress.json validation (Step 1)
+- ❌ Skip subagent confirmation on first run (Step 1.5)
 - ❌ Skip showing what's next (Step 2)
 - ❌ Skip asking about mode (Step 3)
 - ❌ Skip approval question if Step Manual Approve mode (Step 4)
-- ❌ Choose execution method before showing state (Step 5)
-- ❌ Dispatch implementer/verifier without asking how (Step 5)
+- ❌ Dispatch implementer/verifier without using subagent (Step 5)
 
 ---
 
@@ -278,54 +249,62 @@ Skill(skill: "workflow:finalize")
 Start: /workflow:execute
 
 Step 1: Read state
-  → Step 1 pending, Step Manual Approve mode, Workflow initialized
+  → Step 1 pending, Mode not set, Workflow initialized
+
+Step 1.5: Confirm subagent execution
+  → "This workflow will use subagents. Continue?"
+  → User: Agree
+  → Continue to Step 2
 
 Step 2: Show next
   → "Will implement step 1, then verify, then ask for approval"
 
 Step 3: Confirm mode
-  → "Is Step Manual Approve correct?" → User: Yes
+  → "How should approval work?" → User: Step Manual Approve
+  → Set mode = 1, workflow_status = in-progress
 
 Step 4: Check approval
   → Step 1 is pending, so skip approval
 
-Step 5: Ask execution method
-  → "Subagent or Current Session?"
-  → User: Subagent
+Step 5: Execute with subagent
   → Dispatch Agent(implementer step 1)
-  → Agent returns, step status = verification
+  → Agent returns, read step-1.md Implementation section
+  → Set status = verification, loop back to Step 1
 
 Step 1 again: Read state
-  → Step 1 verification, Step Manual Approve mode
+  → Step 1 verification, Mode = 1 (Step Manual Approve)
+
+Step 1.5: Confirm subagent execution
+  → Skip (workflow_status is in-progress, not initialized)
 
 Step 2: Show next
   → "Will verify step 1, then ask for approval"
 
 Step 3: Confirm mode
-  → Already confirmed, skip
+  → Skip (mode already set)
 
 Step 4: Check approval
   → Step 1 is verification (not awaiting-approval yet), skip
 
-Step 5: Ask execution method
-  → "Subagent or Current Session?"
-  → User: Subagent
+Step 5: Execute with subagent
   → Dispatch Agent(verifier step 1)
-  → Agent returns, step status = complete
+  → Agent returns, read step-1.md Verification section
+  → Set status = complete, set awaiting_approval_since, loop back to Step 1
 
 Step 1 again: Read state
-  → Step 1 complete, Step Manual Approve mode
+  → Step 1 complete, awaiting approval
+
+Step 1.5: Skip (workflow_status is in-progress)
 
 Step 2: Show next
   → "Step 1 verified, will ask for approval"
 
-Step 3: Confirm mode
-  → Already confirmed, skip
+Step 3: Skip (mode already set)
 
-Step 4: Check approval
-  → Step 1 complete → Ask approval
+Step 4: Check approval (Mode 1 AND status = complete)
+  → Ask user approval
   → User: Approve
-  → Step 1 status = complete, move to step 2
+  → Set status = complete, move to step 2
 
 [Repeat for steps 2 & 3...]
 

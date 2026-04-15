@@ -13,7 +13,7 @@ Initialize a new workflow by creating:
 
 ## When to Use
 
-Use `workflow:bootstrap` when starting a new workflow task with user-provided task description, step requirements, and mode selection.
+Use `workflow:bootstrap` when starting a new workflow task with user-provided task description and step requirements.
 
 ## Input
 
@@ -308,11 +308,11 @@ Report files created (PLAN.md, progress.json, steps/step-*.md, .workflow-config.
 
 ## Example
 
-Input: `feature-auth` with 3 steps and Mode 1
+Input: `feature-auth` with 3 steps
 
 Output: `.workflow/feature-auth/` with PLAN.md, progress.json, steps/step-1.md through step-3.md, and .workflow-config.json
 
-Ready to execute: `/workflow:execute`
+Ready to execute: `/workflow:execute` (you will choose mode when execute starts)
 
 ## Error Handling
 

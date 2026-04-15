@@ -1,6 +1,6 @@
 ---
 name: workflow:verifier
-description: SUBAGENT ONLY - Verify workflow step acceptance criteria
+description: SUBAGENT ONLY - Verify workflow step verification criteria
 execution-context: subagent-only
 dispatch-via: workflow:execute
 ---
@@ -12,8 +12,10 @@ dispatch-via: workflow:execute
 This skill ONLY runs in subagent context via workflow:execute.
 DO NOT call this skill directly from main session.
 
-- If in main session → Use `workflow:execute` instead
-- If you are a subagent → You were correctly dispatched, proceed
+- If in main session → Use `workflow:execute` instead (user must choose subagent execution)
+- If you are a subagent → You were correctly dispatched via Agent() by execute, proceed
+
+This skill is invoked by execute ONLY after user confirms subagent execution in Step 1.5.
 
 ---
 
