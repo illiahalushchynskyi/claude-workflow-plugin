@@ -1,101 +1,130 @@
 ---
 name: workflow:execute
-description: Orchestrate workflow execution - choose Subagent Mode (automated) or Manual Mode (transparent)
+description: Orchestrate workflow execution - read state, show plan, ask about mode and execution method
 ---
 
 # Workflow Execute
 
 **⚠️ ORCHESTRATOR: Runs in MAIN SESSION**
 
-You manage workflow state and coordinate step execution. Choose your execution mode:
-
-## Execution Modes
-
-| Mode | Implementer/Verifier | Best for |
-|------|---------------------|----------|
-| **Subagent** (✅ Recommended) | Dispatched via `Agent()` as isolated subagents | Speed, automation, hands-off |
-| **Manual** | Invoked via `Skill()` in this session | Debugging, transparency, control |
-
-**The ONLY difference:** How implementer and verifier are invoked (Agent vs Skill). Everything else is the same.
+Execute manages workflow state and coordinates step execution in strict order.
 
 ---
 
-## When to Use
+## Procedure - Exact Order (Non-Negotiable)
 
-Use `/workflow:execute` when:
-- ✅ Workflow has been bootstrapped (PLAN.md exists)
-- ✅ progress.json exists (created by bootstrap)
-- ✅ All step-N.md files exist
-- ✅ User wants to start or resume execution
-- ✅ PLAN.md status is `pending` or `in-progress`
-- ✅ Resuming from pause (e.g., after Mode 1 approval)
+### Step 1: Read Current State
 
-**REQUIRED:** If progress.json doesn't exist, STOP and tell user to run `/workflow:bootstrap`
+1. Check progress.json exists (if not: STOP, tell user to run `/workflow:bootstrap`)
+2. Read `.workflow/{TASK_NAME}/PLAN.md` (mode: 1 or 2)
+3. Read `.workflow/{TASK_NAME}/progress.json` (step statuses, workflow_status)
+4. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
+5. Find first step with status ≠ "complete"
+6. Determine what was last done and what's next
 
----
-
-## Procedure
-
-### Step 0: Validate progress.json Exists
-
-Before doing anything, check if progress.json exists:
-
-```bash
-if [ ! -f ".workflow/{TASK_NAME}/progress.json" ]; then
-  # progress.json missing - STOP, cannot proceed
-  echo "❌ ERROR: progress.json not found"
-  echo ".workflow/{TASK_NAME}/progress.json is required"
-  echo "Ensure workflow was created with: /workflow:bootstrap"
-  exit 1
-fi
+**Output to user:**
+```
+Current state:
+- Workflow: {TASK_NAME}
+- Mode: {1 or 2}
+- Current step: {N} ({STEP_NAME})
+- Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
+- Workflow status: {initialized/in-progress/paused/completed}
 ```
 
-**If progress.json is missing:**
-- ❌ STOP execution
-- Tell user: "Workflow not properly initialized. Run `/workflow:bootstrap` first."
-- Do NOT create progress.json yourself
-- Do NOT continue
+---
 
-**If progress.json exists:** Continue to Step 1.
+### Step 2: Show What Will Happen Next
 
-### Step 1: Load State
+Based on current step status, tell user what comes next:
 
-1. Read `.workflow/{TASK_NAME}/PLAN.md` (mode, status)
-2. Read `.workflow/{TASK_NAME}/progress.json` (step statuses) ← Now guaranteed to exist
-3. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
-4. Find first step with status ≠ "complete"
+```
+Next action will be:
+- If status is pending/needs-fix → Implement step {N}
+- If status is verification → Verify step {N}
+- If status is awaiting-approval → Ask for approval (Mode 1)
+- If status is complete → Move to step {N+1}
+- If all complete → Finalize workflow
+```
 
-### Step 2: Update Workflow Status
+**With current Mode {1 or 2}:**
+```
+Mode 1: After implementer finishes → Verifier tests → You approve → Next step
+Mode 2: After implementer finishes → Verifier tests → Automatic next step (no approval)
+```
 
-If first execution (workflow_status == "initialized"):
-1. Set progress.json: `workflow_status` = `in-progress`
-2. Set progress.json: `started` = ISO 8601 timestamp
-3. Set PLAN.md: `status` = `in-progress`
+---
 
-If resuming (workflow_status == "paused"):
-1. Keep status as `in-progress`
-2. Keep `started` timestamp unchanged
+### Step 3: Ask About Workflow Mode (only if needed)
 
-### Step 3: Ask User to Choose Mode
+**Ask user:**
+```
+AskUserQuestion:
+  question: "Is Mode {1 or 2} correct?"
+  header: "Workflow Mode"
+  options:
+    - "Yes, Mode {current} is correct"
+    - "Change to Mode {other}"
+```
+
+**If user wants to change:**
+- Update PLAN.md: mode field
+- Update progress.json: mode field
+- Explain: "Mode 1 = step-by-step approval, Mode 2 = continuous"
+
+**Then continue with chosen mode.**
+
+---
+
+### Step 4: Check If Approval Needed (Mode 1 Only)
+
+**If Mode 1 AND step status is `awaiting-approval`:**
 
 ```
 AskUserQuestion:
-  question: "How should I run implementer and verifier?"
-  header: "Execution Mode"
+  question: "Step {N} passed verification. Approve and continue?"
   options:
-    - "Subagent Mode (Recommended) - I dispatch as Agent() subagents"
-    - "Manual Mode - I run as Skill() in this session"
+    - "Approve and continue to next step"
+    - "Request changes (back to implementation)"
 ```
 
-Store the choice and continue.
+**If approve:**
+- Update progress.json: step status = `complete`
+- Update PLAN.md: step row status = `complete`
+- Continue to next step (loop back to Step 1 if more steps)
+- If all complete → Finalize
 
-### Step 4: Main Loop
+**If request changes:**
+- Update progress.json: step status = `needs-fix`
+- Loop back to Step 5 (to implement again)
 
-**Repeat until all steps complete:**
+**If NOT Mode 1 or NOT awaiting-approval:** Skip this, continue to Step 5.
 
-**If step status is `pending` or `needs-fix`:**
+---
 
-Subagent Mode:
+### Step 5: Choose Execution Method (ONLY if implementer or verifier needed)
+
+**Only ask Step 5 if:**
+- Step status is `pending` or `needs-fix` (need to implement)
+- Step status is `verification` (need to verify)
+
+**Ask user:**
+```
+AskUserQuestion:
+  question: "How should I run implementer/verifier?"
+  header: "Execution Method"
+  options:
+    - "Subagent Mode - I dispatch as Agent() (faster, hands-off)"
+    - "Manual Mode - I invoke Skill() in this session (transparent)"
+```
+
+**THEN execute based on choice:**
+
+#### Step 5a: Subagent Mode
+
+Dispatch as isolated Agent subagent:
+
+**If implementing (step status = pending/needs-fix):**
 ```python
 Agent(
   description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
@@ -105,33 +134,23 @@ You are implementing step {N} of {TASK_NAME}.
 
 Read: .workflow/{TASK_NAME}/steps/step-{N}.md
 Invoke: Skill(skill: "workflow:implementer")
-Follow the skill procedure.
+Follow the skill procedure exactly.
 
 Config:
 - projectType: {PROJECT_TYPE}
 - buildCommand: {BUILD_COMMAND}
 - testCommand: {TEST_COMMAND}
 - migrateCommand: {MIGRATE_COMMAND}
+
+Your step is complete when:
+- Code changes implemented
+- Tests pass
+- step-{N}.md status = verification
 """
 )
 ```
 
-Manual Mode:
-```python
-Skill(skill: "workflow:implementer")
-```
-
-Then:
-1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md`
-2. Check frontmatter `status:` field
-3. If `verification` → Continue loop
-4. If not → Ask user for guidance
-
----
-
-**If step status is `verification`:**
-
-Subagent Mode:
+**If verifying (step status = verification):**
 ```python
 Agent(
   description: f"Verify {TASK_NAME} step {N}: {STEP_NAME}",
@@ -141,207 +160,160 @@ You are verifying step {N} of {TASK_NAME}.
 
 Read: .workflow/{TASK_NAME}/steps/step-{N}.md
 Invoke: Skill(skill: "workflow:verifier")
-Follow the skill procedure.
+Follow the skill procedure exactly.
 
 Config:
 - projectType: {PROJECT_TYPE}
 - buildCommand: {BUILD_COMMAND}
 - testCommand: {TEST_COMMAND}
 - migrateCommand: {MIGRATE_COMMAND}
+
+Your step is complete when:
+- All tests pass
+- All criteria verified
+- step-{N}.md status = complete or needs-fix
 """
 )
 ```
 
-Manual Mode:
+**After Agent returns:**
+1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md`
+2. Check frontmatter `status:` field
+3. If implementation: status should be `verification` now
+4. If verification: status should be `complete` or `needs-fix` now
+5. Loop back to Step 1 (to handle new status)
+
+#### Step 5b: Manual Mode
+
+Invoke skill in this session:
+
+**If implementing (step status = pending/needs-fix):**
+```python
+Skill(skill: "workflow:implementer")
+```
+
+The skill will guide user to:
+- Read step-{N}.md goal
+- Implement code changes
+- Run tests (must pass)
+- Commit changes
+- Update step-{N}.md Implementation section
+- Set status = `verification`
+
+**If verifying (step status = verification):**
 ```python
 Skill(skill: "workflow:verifier")
 ```
 
-Then:
+The skill will guide user to:
+- Build project
+- Run tests (must all pass)
+- Verify acceptance criteria
+- Update step-{N}.md Verification section
+- Set status = `complete` or `needs-fix`
+
+**After Skill returns:**
 1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md`
 2. Check frontmatter `status:` field
-3. If `complete`:
-   - Mode 1: Update progress.json `awaiting-approval`, ask user for approval
-   - Mode 2: Continue to next step
-4. If `needs-fix` → Loop back to implementer
-5. If other → Ask user for guidance
+3. Verify status changed correctly
+4. Loop back to Step 1 (to handle new status)
 
 ---
 
-**If step status is `awaiting-approval` (Mode 1 only):**
+## Loop Until Complete
 
-```
-AskUserQuestion:
-  question: "Step {N} passed verification. Approve and continue?"
-  options:
-    - "Approve and continue"
-    - "Request changes"
-```
+Repeat Steps 1-5 until:
+- All steps have status = `complete`
+- All criteria verified
 
-If approve:
-- Update progress.json: step `status` = `complete`
-- Continue loop
-
-If request changes:
-- Update progress.json: step `status` = `needs-fix`
-- Loop back to implementer
-
----
-
-**If step status is `complete`:**
-
-Move to next step. Repeat loop.
-
----
-
-**If all steps complete:**
-
+Then finalize:
 ```python
 Skill(skill: "workflow:finalize")
 ```
-
-Then:
-- Update progress.json: `workflow_status` = `completed`
-- Update PLAN.md: `status` = `completed`
-- Exit
 
 ---
 
 ## Critical Rules
 
-**BEFORE ANYTHING ELSE:**
-- ✅ Check Step 0: **progress.json MUST exist**
-- ✅ If missing → STOP and tell user to run `/workflow:bootstrap`
-- ❌ Do NOT create progress.json yourself
-- ❌ Do NOT try to proceed without progress.json
+**ALWAYS follow Step 1-5 in EXACT order:**
+- ✅ Step 1: Read state first
+- ✅ Step 2: Show what comes next
+- ✅ Step 3: Confirm/change workflow mode
+- ✅ Step 4: Handle approval if Mode 1
+- ✅ Step 5: Choose execution method (Subagent or Manual) ONLY if implementer/verifier needed
 
-**YOU ARE THE ORCHESTRATOR:**
-- ✅ Read state files (PLAN.md, progress.json, .workflow-config.json)
-- ✅ Coordinate step execution (Subagent or Manual mode)
-- ✅ Ask users for approval
-- ✅ Verify step completion by reading files
-
-**IMPLEMENTER & VERIFIER (in BOTH modes):**
-- ✅ Implement code / Verify implementation (skill guides them)
-- ✅ Update step-{N}.md with status
-- ❌ Not your job (implement/verify yourself)
-
-**MODE CHOICE MATTERS:**
-- Subagent: `Agent(implementer)` then `Agent(verifier)`
-- Manual: `Skill(workflow:implementer)` then `Skill(workflow:verifier)`
+**NEVER skip or reorder steps.**
 
 **NEVER:**
-- ❌ Skip progress.json validation (Step 0)
-- ❌ Create progress.json if missing
-- ❌ Skip mode selection question
-- ❌ Write code yourself
-- ❌ Run tests yourself
-- ❌ Assume success without reading step files after execution
+- ❌ Skip progress.json validation (Step 1)
+- ❌ Skip showing what's next (Step 2)
+- ❌ Skip asking about mode (Step 3)
+- ❌ Skip approval question if Mode 1 (Step 4)
+- ❌ Choose execution method before showing state (Step 5)
+- ❌ Dispatch implementer/verifier without asking how (Step 5)
 
 ---
 
-## Example: Subagent Mode (3 steps, Mode 1)
+## Example Flow: 3 Steps, Mode 1
 
 ```
-/workflow:execute
-↓
-Step 0: Check progress.json exists? ✓ Yes
-↓
-Load state: Step 1 pending, Mode 1
-↓
-Ask: "Subagent Mode or Manual Mode?"
-User chooses: Subagent Mode
-↓
-Agent(implementer step 1)
-↓
-Read step-1.md: status = verification ✓
-↓
-Agent(verifier step 1)
-↓
-Read step-1.md: status = complete ✓
-↓
-Ask: "Approve step 1?"
-User approves
-↓
-Step 2 pending
-↓
-[Repeat for step 2...]
-↓
-[Repeat for step 3...]
-↓
-All steps complete
-↓
-Skill(finalize)
-↓
-Done
-```
+Start: /workflow:execute
 
----
+Step 1: Read state
+  → Step 1 pending, Mode 1, Workflow initialized
 
-## Example: Manual Mode (3 steps, Mode 1)
+Step 2: Show next
+  → "Will implement step 1, then verify, then ask for approval"
 
-```
-/workflow:execute
-↓
-Step 0: Check progress.json exists? ✓ Yes
-↓
-Load state: Step 1 pending, Mode 1
-↓
-Ask: "Subagent Mode or Manual Mode?"
-User chooses: Manual Mode
-↓
-Skill(workflow:implementer) [I run it here]
-[Step 1 implementation happens...]
-↓
-Read step-1.md: status = verification ✓
-↓
-Skill(workflow:verifier) [I run it here]
-[Step 1 verification happens...]
-↓
-Read step-1.md: status = complete ✓
-↓
-Ask: "Approve step 1?"
-User approves
-↓
+Step 3: Confirm mode
+  → "Is Mode 1 correct?" → User: Yes
+
+Step 4: Check approval
+  → Step 1 is pending, so skip approval
+
+Step 5: Ask execution method
+  → "Subagent or Manual?"
+  → User: Subagent Mode
+  → Dispatch Agent(implementer step 1)
+  → Agent returns, step status = verification
+
+Step 1 again: Read state
+  → Step 1 verification, Mode 1
+
+Step 2: Show next
+  → "Will verify step 1, then ask for approval"
+
+Step 3: Confirm mode
+  → Already confirmed, skip
+
+Step 4: Check approval
+  → Step 1 is verification (not awaiting-approval yet), skip
+
+Step 5: Ask execution method
+  → "Subagent or Manual?"
+  → User: Subagent Mode
+  → Dispatch Agent(verifier step 1)
+  → Agent returns, step status = complete
+
+Step 1 again: Read state
+  → Step 1 complete, Mode 1
+
+Step 2: Show next
+  → "Step 1 verified, will ask for approval"
+
+Step 3: Confirm mode
+  → Already confirmed, skip
+
+Step 4: Check approval
+  → Step 1 complete → Ask approval
+  → User: Approve
+  → Step 1 status = complete, move to step 2
+
 [Repeat for steps 2 & 3...]
-↓
-All steps complete
-↓
-Skill(finalize) [I run it here]
-↓
-Done
+
+All steps complete → Finalize
 ```
 
 ---
 
-## Example: Error - progress.json Missing
-
-```
-/workflow:execute
-↓
-Step 0: Check progress.json exists? ❌ NO
-↓
-❌ ERROR: progress.json not found
-.workflow/{TASK_NAME}/progress.json is required
-
-Ensure workflow was created with: /workflow:bootstrap
-
-[STOP - Do NOT continue]
-```
-
-**User sees:**
-```
-Workflow not properly initialized.
-
-Please run: /workflow:bootstrap
-
-This will create:
-- PLAN.md
-- progress.json
-- step-1.md, step-2.md, etc.
-- .workflow-config.json
-```
-
----
-
-See [EXECUTION_MODES.md](../docs/EXECUTION_MODES.md) for detailed mode comparison and when to choose each.
+See [EXECUTION_MODES.md](../docs/EXECUTION_MODES.md) for detailed execution method comparison.
