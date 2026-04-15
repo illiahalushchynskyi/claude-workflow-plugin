@@ -1,375 +1,281 @@
-# Workflow Execute: Execution Modes
+# Execution Modes: Subagent vs Manual
 
-When you run `/workflow:execute`, Claude will ask you to choose how to execute your workflow:
+When you run `/workflow:execute`, you choose how to execute your workflow:
 
-```
-How should implementer and verifier work?
+## Quick Comparison
 
-A) Subagent Mode (Recommended)
-   I dispatch implementer/verifier as isolated subagents via Agent().
-   You handle orchestration only.
+| Aspect | Subagent Mode | Manual Mode |
+|--------|--------------|-------------|
+| **What runs** | `Agent(implementer)` then `Agent(verifier)` | `Skill(workflow:implementer)` then `Skill(workflow:verifier)` |
+| **Isolation** | Isolated subagent context | This main session |
+| **Speed** | Fast (parallel possible) | Slow (sequential) |
+| **Visibility** | Less visible | Very visible |
+| **Best for** | Speed, automation | Debugging, transparency |
+| **Risk** | If Agent breaks, unclear | Low (you see everything) |
 
-B) Manual Mode
-   I guide you to run workflow:implementer and workflow:verifier directly.
-   You invoke each skill manually.
-```
+---
 
 ## Subagent Mode (Recommended) ⚡
 
-**How it works:**
-1. You run `/workflow:execute`
-2. Execute asks: "Subagent Mode or Manual Mode?"
-3. You choose: "Subagent Mode (Recommended)"
-4. Execute automatically dispatches implementer and verifier as Agent subagents
-5. Implementer runs, updates step file with status `verification`
-6. Verifier runs, updates step file with status `complete` or `needs-fix`
-7. Execute reads files, determines next action
-8. Repeat until all steps complete
-9. Execute asks for final approval and runs finalize
+When you choose **Subagent Mode**, I dispatch implementer and verifier as isolated Agent subagents.
 
-**Visual flow:**
+### How It Works
+
 ```
-/workflow:execute
+You run: /workflow:execute
     ↓
-"Choose mode?"
+Choose: "Subagent Mode"
     ↓
-Subagent Mode (user clicks)
+I dispatch: Agent(implementer) ← Isolated context
+    ↓ (agent runs, returns)
+Read step-1.md: status is now verification
     ↓
-Claude dispatches Agent(implementer)  ← Isolated subagent
+I dispatch: Agent(verifier) ← Isolated context
+    ↓ (agent runs, returns)
+Read step-1.md: status is now complete
     ↓
-Step file status: verification
+[Ask for approval in Mode 1]
     ↓
-Claude dispatches Agent(verifier)  ← Isolated subagent
-    ↓
-Step file status: complete/needs-fix
-    ↓
-Loop or approve or ask user for Mode 1 approval
+[Continue to next step]
 ```
 
-**Advantages:**
-- ✅ Fastest execution
-- ✅ Fully automated once started
-- ✅ Cleaner separation of concerns
-- ✅ Orchestrator never writes code
-- ✅ Recommended approach
+### Advantages
 
-**Disadvantages:**
-- ❌ Less visible during execution
-- ❌ If Agent dispatch breaks, workflow may fail
-- ❌ Harder to debug if Agent doesn't work
+✅ Fast - agents can work in parallel (future enhancement)
+✅ Hands-off - set and forget execution
+✅ Isolated - subagents don't affect main session
+✅ Cleaner - clear separation of roles
 
-**Best for:**
-- You trust the Agent mechanism
-- You want fast, hands-off execution
-- You're confident the workflow will work
-- You don't need step-by-step visibility
+### Disadvantages
+
+❌ Less visible - can't see agent working
+❌ Harder to debug - agent output less visible
+❌ If Agent dispatch breaks - unclear error
+
+### When to Use Subagent Mode
+
+```
+✅ You trust the Agent mechanism is working
+✅ You want fast execution
+✅ You don't need to inspect each step
+✅ This is a "set it and forget it" task
+✅ You have other work to do while it runs
+```
 
 ---
 
 ## Manual Mode 🎯
 
-**How it works:**
-1. You run `/workflow:execute`
-2. Execute asks: "Subagent Mode or Manual Mode?"
-3. You choose: "Manual Mode"
-4. Execute asks: "Ready to implement step 1?"
-5. You run: `/workflow:implementer` (in another Claude session or tab)
-6. You return and confirm: "Done implementing"
-7. Execute reads step file to verify status
-8. Execute asks: "Ready to verify step 1?"
-9. You run: `/workflow:verifier` (in another Claude session or tab)
-10. You return and confirm: "Done verifying"
-11. Execute reads step file to verify status
-12. Repeat for each step
-13. Execute asks for final approval
-14. You run: `/workflow:finalize`
-15. You return and confirm: "Done finalizing"
+When you choose **Manual Mode**, I invoke implementer and verifier as Skills in this main session.
 
-**Visual flow:**
-```
-/workflow:execute
-    ↓
-"Choose mode?"
-    ↓
-Manual Mode (user clicks)
-    ↓
-"Ready to implement step 1?"
-    ↓
-Open new tab/session
-    ↓
-/workflow:implementer (you run this in new session)
-    ↓
-Return to execute tab
-    ↓
-"Have you run /workflow:implementer?"
-    ↓
-✓ Yes, confirmed
-    ↓
-Execute reads step file
-    ↓
-Status should be: verification
-    ↓
-"Ready to verify step 1?"
-    ↓
-Open new tab/session
-    ↓
-/workflow:verifier (you run this in new session)
-    ↓
-Return to execute tab
-    ↓
-"Have you run /workflow:verifier?"
-    ↓
-✓ Yes, confirmed
-    ↓
-Loop to next step...
-```
-
-**Advantages:**
-- ✅ Full visibility at every step
-- ✅ Complete control over timing
-- ✅ Easy to debug if something goes wrong
-- ✅ Can inspect/review between steps
-- ✅ More transparent process
-- ✅ No Agent dispatch issues
-
-**Disadvantages:**
-- ❌ Much slower (lots of back-and-forth)
-- ❌ Requires multiple Claude sessions/tabs
-- ❌ More tedious (more clicking)
-- ❌ Not recommended for large workflows
-
-**Best for:**
-- You want full visibility and control
-- You're debugging a workflow
-- Agent dispatch isn't working
-- You prefer transparent, step-by-step execution
-- You have time and want to inspect each step
-
----
-
-## How to Choose
-
-### Use Subagent Mode If:
+### How It Works
 
 ```
-✅ You trust the Agent mechanism
-✅ You want fast execution
-✅ You don't need to inspect each step
-✅ You're confident in your workflow
-✅ This is a "run and forget" task
-✅ You have other work to do while it runs
+You run: /workflow:execute
+    ↓
+Choose: "Manual Mode"
+    ↓
+I invoke: Skill(workflow:implementer) ← In this session
+    ↓
+[You implement step 1...]
+[Skill guides you...]
+[You update step file...]
+↓
+Read step-1.md: status is now verification
+    ↓
+I invoke: Skill(workflow:verifier) ← In this session
+    ↓
+[You verify step 1...]
+[Skill guides you...]
+[You update step file...]
+    ↓
+Read step-1.md: status is now complete
+    ↓
+[Ask for approval in Mode 1]
+    ↓
+[Continue to next step]
 ```
 
-### Use Manual Mode If:
+### Advantages
+
+✅ Maximum visibility - you see every action
+✅ Maximum control - you make every decision
+✅ Easy to debug - you see all output
+✅ Transparent - clear what's happening
+✅ No Agent issues - no agent dispatch problems
+
+### Disadvantages
+
+❌ Slower - back-and-forth with prompts
+❌ More tedious - lots of confirmations
+❌ Not automated - requires interaction
+
+### When to Use Manual Mode
 
 ```
 ✅ You want full visibility
-✅ You're debugging or testing the workflow
+✅ You're debugging a workflow
 ✅ Agent dispatch isn't working
-✅ You want to review each step
-✅ You prefer slow and steady execution
-✅ You need to inspect/fix between steps
-✅ You're learning how the workflow works
+✅ You prefer step-by-step execution
+✅ You want to inspect each step closely
+✅ You're learning how workflows work
 ```
 
 ---
 
-## Switching Modes Mid-Workflow
+## Decision Matrix
 
-If you're in Manual Mode and want to switch to Subagent Mode:
+### Use Subagent Mode If:
+
+- [ ] You've used workflows before and they worked
+- [ ] You're confident in your task definition
+- [ ] You don't need to inspect each step
+- [ ] You want fast execution
+- [ ] You have time for something else while it runs
+
+**→ Choose Subagent Mode**
+
+### Use Manual Mode If:
+
+- [ ] This is your first workflow
+- [ ] You're debugging a problem
+- [ ] You want maximum visibility
+- [ ] You've had Agent dispatch issues
+- [ ] You want to review each step
+- [ ] You like hands-on control
+
+**→ Choose Manual Mode**
+
+---
+
+## Switching Modes
+
+If you start with one mode and want to switch:
 
 1. Note which step you're on (check progress.json)
-2. Stop the current execution
-3. Run `/workflow:execute` again
-4. Choose "Subagent Mode"
-5. Execute will resume from the incomplete step
+2. Run `/workflow:execute` again
+3. Choose the other mode
+4. Execute will resume from the incomplete step
 
-The opposite (Subagent → Manual) is also possible but less common.
+The modes are interchangeable - a Manual step can be followed by a Subagent step, or vice versa.
 
 ---
 
-## Practical Example: Manual Mode Walkthrough
+## Examples
 
-Let's say you have a 3-step workflow: `feature-auth`
-
-### Step 1: Start Execute
-
-```bash
-/workflow:execute
-```
-
-Claude asks:
-```
-How should implementer and verifier work?
-
-A) Subagent Mode (Recommended)
-B) Manual Mode
-```
-
-You click: **Manual Mode**
-
-Claude asks:
-```
-Start workflow from step 1 (Mode 1, manual invocation)?
-
-Options:
-- Yes, I'll run skills manually
-- No, stop
-```
-
-You click: **Yes, I'll run skills manually**
-
-Claude says:
-```
-Step 1 status: pending
-
-Ready to implement? Run: /workflow:implementer
-```
-
-### Step 2: Implement Step 1
-
-You open a new Claude tab/window and run:
-
-```bash
-/workflow:implementer
-```
-
-The implementer skill guides you:
-1. Read step-1.md goal
-2. Make code changes
-3. Run tests (must pass)
-4. Commit changes
-5. Update step-1.md Implementation section
-6. **Set status: verification**
-
-When done, you return to the execute tab.
-
-### Step 3: Confirm Implement
-
-Claude is waiting:
-```
-Have you run /workflow:implementer and confirmed status is verification?
-
-Options:
-- Yes, I've confirmed
-- No, let me check
-```
-
-You click: **Yes, I've confirmed**
-
-Claude reads step-1.md:
-```
-✓ Step 1 status is verification
-
-Ready to verify? Run: /workflow:verifier
-```
-
-### Step 4: Verify Step 1
-
-You open a new Claude tab/window and run:
-
-```bash
-/workflow:verifier
-```
-
-The verifier skill guides you:
-1. Build project
-2. Run tests (all must pass)
-3. Verify acceptance criteria
-4. Check migrations
-5. Update step-1.md Verification section
-6. **Set status: complete**
-
-When done, you return to the execute tab.
-
-### Step 5: Confirm Verify
-
-Claude is waiting:
-```
-Have you run /workflow:verifier and confirmed status is complete?
-
-Options:
-- Yes, I've confirmed
-- No, let me check
-```
-
-You click: **Yes, I've confirmed**
-
-Claude reads step-1.md:
-```
-✓ Step 1 status is complete
-
-**Mode 1 Approval Gate:**
-Step 1 verification passed. Approve and continue to step 2?
-
-Options:
-- Approve and continue
-- Request changes (back to implementation)
-```
-
-You click: **Approve and continue**
-
-Claude:
-```
-✓ Step 1 approved
-→ Step 2 status: pending
-
-Ready to implement step 2? Run: /workflow:implementer
-```
-
-### Steps 2 & 3: Repeat Process
-
-You repeat the same process for steps 2 and 3.
-
-### Final Step: Finalize
-
-When all steps are complete:
+### Example 1: Subagent Mode - Feature Workflow
 
 ```
-✓ All 3 steps complete
+Task: Add authentication system (3 steps)
+Mode: 1 (Step-by-Step approval)
+Execution: Subagent (fast)
 
-Ready to finalize? Run: /workflow:finalize
+Step 1: Add token service
+  → Agent(implementer) [10 min]
+  → Agent(verifier) [5 min]
+  → User approval [2 min]
+
+Step 2: Add login endpoint
+  → Agent(implementer) [12 min]
+  → Agent(verifier) [5 min]
+  → User approval [2 min]
+
+Step 3: Add tests
+  → Agent(implementer) [10 min]
+  → Agent(verifier) [5 min]
+  → User approval [2 min]
+
+Final: Finalize → commit
+
+Total: ~55 min (mostly automated)
 ```
 
-You run `/workflow:finalize` to create the final commit.
+### Example 2: Manual Mode - Debugging
+
+```
+Task: Fix login timeout bug (2 steps)
+Mode: 2 (End-to-End)
+Execution: Manual (transparent)
+
+Step 1: Fix session expiration
+  → I invoke Skill(workflow:implementer)
+  → You read & implement
+  → You update step file [15 min]
+  → I read step file ✓
+  → I invoke Skill(workflow:verifier)
+  → You test & verify [10 min]
+  → I read step file ✓
+
+Step 2: Add regression test
+  → I invoke Skill(workflow:implementer)
+  → You write test [10 min]
+  → I invoke Skill(workflow:verifier)
+  → You verify test works [5 min]
+
+Final: Finalize → commit
+
+Total: ~40 min (fully transparent)
+```
 
 ---
 
 ## Troubleshooting by Mode
 
-### Subagent Mode Issues
+### Subagent Mode: "Agent didn't work"
 
-**Problem:** Execute says "Dispatching implementer..." but nothing happens
-
-**Solutions:**
-1. Check if Agent() tool is working (test with a simple Agent call)
-2. Try switching to Manual Mode instead
-3. Check Claude Code logs for Agent errors
-
-**Problem:** Execute completes but step file status didn't change
+**Check:**
+1. Can you run a simple `Agent()` call? (Test with /verify or similar)
+2. Does Agent() return at all?
+3. Check step file - did agent update status?
 
 **Solutions:**
-1. Switch to Manual Mode for better visibility
-2. Manually run `/workflow:implementer` to check for errors
-3. Review step file Implementation section for notes
+1. Switch to Manual Mode (transparent, no agent issues)
+2. Check Agent tool is working
+3. Inspect step file Implementation/Verification sections for error notes
 
-### Manual Mode Issues
+### Manual Mode: "Skill execution is slow"
 
-**Problem:** Execute asks "Have you run /workflow:implementer?" but you forgot
+**This is expected** - Manual Mode is slower because:
+- You read the goal
+- You implement
+- You run tests
+- You update file
+- I read file
+- Repeat
+
+This is by design for transparency.
 
 **Solutions:**
-1. Click "No, let me check"
-2. Open new tab and run `/workflow:implementer`
-3. Return and click "Yes, I've confirmed"
+1. Switch to Subagent Mode if you want speed
+2. Or accept slower, more visible execution
 
-**Problem:** Step file status is wrong after you ran the skill
+### Both Modes: "Step file status isn't changing"
+
+**Check:**
+1. Is the skill completing without errors?
+2. Did you (or the agent) set the status field?
+3. Is the YAML frontmatter correct?
 
 **Solutions:**
-1. Check what the skill output was
-2. Manually update the step-N.md status field if needed
-3. Return to execute and confirm
+1. Read the step file Implementation/Verification section for error notes
+2. Check the skill ran successfully
+3. Manually update status if needed and continue
+
+---
+
+## Key Insight
+
+Both modes execute the **same implementer and verifier** procedures. The **only difference** is:
+
+- **Subagent Mode:** Implementer/Verifier run as isolated Agent subagents (faster, less visible)
+- **Manual Mode:** Implementer/Verifier run as Skills in this session (slower, more visible)
+
+Choose based on your needs:
+- Need speed? **Subagent Mode**
+- Need visibility? **Manual Mode**
+- Not sure? **Start with Manual Mode** (transparent), switch to Subagent once working
 
 ---
 
 See [MODE_GUIDE.md](MODE_GUIDE.md) for workflow modes (Mode 1 vs Mode 2).
-See [EXECUTE_AGENT_DISPATCH.md](EXECUTE_AGENT_DISPATCH.md) for Agent vs Skill patterns.
+See [EXECUTE_AGENT_DISPATCH.md](EXECUTE_AGENT_DISPATCH.md) for technical dispatch patterns.
