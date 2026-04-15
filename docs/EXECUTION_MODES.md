@@ -4,7 +4,7 @@ When you run `/workflow:execute`, you choose how to execute your workflow:
 
 ## Quick Comparison
 
-| Aspect | Subagent Mode | Manual Mode |
+| Aspect | Subagent | Current Session |
 |--------|--------------|-------------|
 | **What runs** | `Agent(implementer)` then `Agent(verifier)` | `Skill(workflow:implementer)` then `Skill(workflow:verifier)` |
 | **Isolation** | Isolated subagent context | This main session |
@@ -15,9 +15,9 @@ When you run `/workflow:execute`, you choose how to execute your workflow:
 
 ---
 
-## Subagent Mode (Recommended) ⚡
+## Subagent (Recommended) ⚡
 
-When you choose **Subagent Mode**, I dispatch implementer and verifier as isolated Agent subagents.
+When you choose **Subagent**, I dispatch implementer and verifier as isolated Agent subagents.
 
 ### How It Works
 
@@ -64,9 +64,9 @@ Read step-1.md: status is now complete
 
 ---
 
-## Manual Mode 🎯
+## Current Session 🎯
 
-When you choose **Manual Mode**, I invoke implementer and verifier as Skills in this main session.
+When you choose **Current Session**, I invoke implementer and verifier as Skills in this main session.
 
 ### How It Works
 
@@ -125,7 +125,7 @@ Read step-1.md: status is now complete
 
 ## Decision Matrix
 
-### Use Subagent Mode If:
+### Use Subagent If:
 
 - [ ] You've used workflows before and they worked
 - [ ] You're confident in your task definition
@@ -133,9 +133,9 @@ Read step-1.md: status is now complete
 - [ ] You want fast execution
 - [ ] You have time for something else while it runs
 
-**→ Choose Subagent Mode**
+**→ Choose Subagent**
 
-### Use Manual Mode If:
+### Use Current Session If:
 
 - [ ] This is your first workflow
 - [ ] You're debugging a problem
@@ -144,7 +144,7 @@ Read step-1.md: status is now complete
 - [ ] You want to review each step
 - [ ] You like hands-on control
 
-**→ Choose Manual Mode**
+**→ Choose Current Session**
 
 ---
 
@@ -163,7 +163,7 @@ The modes are interchangeable - a Manual step can be followed by a Subagent step
 
 ## Examples
 
-### Example 1: Subagent Mode - Feature Workflow
+### Example 1: Subagent - Feature Workflow
 
 ```
 Task: Add authentication system (3 steps)
@@ -190,7 +190,7 @@ Final: Finalize → commit
 Total: ~55 min (mostly automated)
 ```
 
-### Example 2: Manual Mode - Debugging
+### Example 2: Current Session - Debugging
 
 ```
 Task: Fix login timeout bug (2 steps)
@@ -221,7 +221,7 @@ Total: ~40 min (fully transparent)
 
 ## Troubleshooting by Mode
 
-### Subagent Mode: "Agent didn't work"
+### Subagent: "Agent didn't work"
 
 **Check:**
 1. Can you run a simple `Agent()` call? (Test with /verify or similar)
@@ -229,11 +229,11 @@ Total: ~40 min (fully transparent)
 3. Check step file - did agent update status?
 
 **Solutions:**
-1. Switch to Manual Mode (transparent, no agent issues)
+1. Switch to Current Session (transparent, no agent issues)
 2. Check Agent tool is working
 3. Inspect step file Implementation/Verification sections for error notes
 
-### Manual Mode: "Skill execution is slow"
+### Current Session: "Skill execution is slow"
 
 **This is expected** - Manual Mode is slower because:
 - You read the goal
@@ -267,13 +267,13 @@ This is by design for transparency.
 
 Both modes execute the **same implementer and verifier** procedures. The **only difference** is:
 
-- **Subagent Mode:** Implementer/Verifier run as isolated Agent subagents (faster, less visible)
-- **Manual Mode:** Implementer/Verifier run as Skills in this session (slower, more visible)
+- **Subagent:** Implementer/Verifier run as isolated Agent subagents (faster, less visible)
+- **Current Session:** Implementer/Verifier run as Skills in this session (slower, more visible)
 
 Choose based on your needs:
-- Need speed? **Subagent Mode**
-- Need visibility? **Manual Mode**
-- Not sure? **Start with Manual Mode** (transparent), switch to Subagent once working
+- Need speed? **Subagent**
+- Need visibility? **Current Session**
+- Not sure? **Start with Current Session** (transparent), switch to Subagent once working
 
 ---
 
