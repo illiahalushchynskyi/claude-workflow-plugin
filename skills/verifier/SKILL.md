@@ -9,13 +9,40 @@ dispatch-via: workflow:execute
 
 ⚠️ **EXECUTION GUARD: SUBAGENT ONLY**
 
-This skill ONLY runs in subagent context via workflow:execute.
-DO NOT call this skill directly from main session.
+| Execution Context | Action |
+|---|---|
+| Running as **subagent** (dispatched by execute) | ✅ Proceed with full skill |
+| Running in **main session** directly | ❌ STOP—use `workflow:execute` instead |
+| Called without Implementation section | ❌ STOP—implementer must run first |
+| Called without step criteria | ❌ STOP—require step-N.md with criteria |
 
-- If in main session → Use `workflow:execute` instead (user must choose subagent execution)
-- If you are a subagent → You were correctly dispatched via Agent() by execute, proceed
+**Pre-entry checks:**
+- Am I running as a subagent via Agent() dispatch? **YES** → Continue
+- Does step-N.md have Verification Criteria section? **YES** → Continue
+- Does step-N.md have Implementation section (from implementer)? **YES** → Continue
+- Do I have .workflow-config.json with build/test commands? **YES** → Continue
+- **NO to any?** → Report error and exit
 
-This skill is invoked by execute ONLY after user confirms subagent execution in Step 1.5.
+This skill is invoked by execute ONLY after implementer completes and status = verification.
+
+---
+
+## Language-Specific Command Reference
+
+Use this table when you encounter different project types:
+
+| Type | Build Command | Test Command | Install Command | Notes |
+|------|---|---|---|---|
+| `node` | `npm run build` | `npm test` | `npm install` | Check for npm/yarn/pnpm |
+| `php` | (varies) | `composer test` or `phpunit` | `composer install` | PHP usually no build step |
+| `python` | `python setup.py build` | `pytest` or `python -m pytest` | `pip install -e .` | Check pytest.ini or setup.cfg |
+| `rust` | `cargo build --release` | `cargo test` | (auto via cargo) | Cargo manages dependencies |
+| `go` | `go build ./...` | `go test ./...` | `go mod download` | Go has no install step |
+| `java-maven` | `mvn clean compile` | `mvn test` | (auto via mvn) | Maven central repo |
+| `java-gradle` | `gradle build` | `gradle test` | `gradle build` | Gradle wrapper in project |
+| `ruby` | (varies) | `rspec` or `rake test` | `bundle install` | Check Gemfile |
+| `cpp-cmake` | `cmake --build .` | `ctest` | (auto) | CMake generates makefiles |
+| `generic-make` | `make` | `make test` | (varies) | Depends on Makefile |
 
 ---
 
@@ -23,11 +50,15 @@ This skill is invoked by execute ONLY after user confirms subagent execution in 
 
 ### 1. Load Project Config
 
-Read `.workflow-config.json` from task directory. Extract:
+**ACTION:** Read `.workflow-config.json` from task directory
+
+**EXTRACT:**
 - `projectType` - Language/framework (node, php, python, rust, go, java-maven, java-gradle, ruby, cpp-cmake, generic-make, other)
-- `buildCommand` - Command to build (e.g., `cargo build`, `go build`, `python setup.py build`)
-- `testCommand` - Command to run tests (e.g., `pytest`, `cargo test`, `go test ./...`)
+- `buildCommand` - Exact command to build (e.g., `cargo build`, `go build`, `python setup.py build`)
+- `testCommand` - Exact command to run tests (e.g., `pytest`, `cargo test`, `go test ./...`)
 - `migrateCommand` - Migration command if applicable (else null)
+
+**USE:** These exact commands from config, NOT guesses or defaults
 
 ### 2. Read Task File
 
@@ -37,18 +68,30 @@ Extract: Goal, Verification Criteria, Implementation Notes
 
 ### 3. Setup & Build
 
-Run: `${installCommand}` (inferred from projectType) if needed
-Then: `${buildCommand}` (from config)
+**PROCEDURE:**
 
-Fail immediately if build errors. Handle language-specific failures (e.g., compile vs. build errors).
+1. **Install dependencies (if needed):**
+   - Use install command inferred from projectType
+   - Reference **Language-Specific Command Reference** table above
+   - Example: `npm install`, `composer install`, `pip install -e .`, `go mod download`
 
-Example commands by language:
-- **Node:** `npm install` → `npm run build`
-- **PHP:** `composer install` → (build often not needed)
-- **Python:** `pip install -e .` → `python setup.py build`
-- **Rust:** (auto) → `cargo build --release`
-- **Go:** `go mod download` → `go build ./...`
-- **Java:** (auto) → `mvn clean compile` or `gradle build`
+2. **Run build:**
+   - Use `${buildCommand}` from config.json (NOT guessed)
+   - Example: `npm run build`, `cargo build --release`, `python setup.py build`
+
+**FAILURE HANDLING:**
+
+If build fails:
+- ❌ STOP immediately
+- ❌ Do NOT attempt tests
+- Document error: what command, what error output
+- Report to execute: build failed, cannot verify
+
+**SUCCESS SIGNAL:**
+
+- ✅ Build command exits with code 0
+- ✅ No compiler/build errors in output
+- ✅ Build artifacts created (if expected)
 
 ### 4. Docker Setup (if docker-compose.yml exists)
 
@@ -85,18 +128,34 @@ If incomplete or failed: Fail verification and report which migrations are missi
 
 ### 6. Run Tests
 
-Run: `${testCommand}` from config
+**PROCEDURE:**
 
-Language-specific test output handling:
-- **Node/npm:** Exit code 0, "passed" in output
-- **PHP/phpunit:** Exit code 0, "OK" or "passed" in output
-- **Python/pytest:** Exit code 0, "passed" in output
-- **Rust/cargo:** Exit code 0, "test result:" line
-- **Go:** Exit code 0, "ok" in output
-- **Java:** Exit code 0, "BUILD SUCCESS" or tests summary
-- **Ruby/rspec:** Exit code 0, examples passed
+1. **Run test command:**
+   - Execute `${testCommand}` from config.json (exact command, not guessed)
 
-Fail immediately if any test fails. Don't fix code—report which test and why.
+2. **Check result by projectType:**
+
+| Type | Success Signal | Failure Signal |
+|------|---|---|
+| `node` | Exit code 0, "passed" in output | Exit code ≠ 0 or failures listed |
+| `php` | Exit code 0, "OK" or "passed" in output | Exit code ≠ 0 or FAIL in output |
+| `python` | Exit code 0, "passed" in output | Exit code ≠ 0 or FAILED in output |
+| `rust` | Exit code 0, "test result: ok" in output | Exit code ≠ 0 or "test result: FAILED" |
+| `go` | Exit code 0, "ok" in output | Exit code ≠ 0 or "FAIL" in output |
+| `java-maven` | Exit code 0, "BUILD SUCCESS" | Exit code ≠ 0 or BUILD FAILURE |
+| `java-gradle` | Exit code 0, no test failures in output | Exit code ≠ 0 or "> Task :test FAILED" |
+| `ruby` | Exit code 0, examples passed | Exit code ≠ 0 or failures listed |
+| `cpp-cmake` | `ctest` exit code 0 | `ctest` exit code ≠ 0 |
+| `generic-make` | `make test` exit code 0 | `make test` exit code ≠ 0 |
+
+**FAILURE HANDLING:**
+
+If ANY test fails:
+- ❌ STOP immediately
+- ❌ Do NOT proceed to manual criterion testing
+- ❌ Do NOT try to fix code (that's implementer's job)
+- Document: which test failed, what the error was
+- Report to execute: tests failed, cannot verify
 
 ### 7. Manual Test Each Criterion
 
@@ -111,76 +170,138 @@ Document each with evidence: what tested, expected, got, PASS/FAIL.
 
 ### 8. Document Results
 
-Update {TASK_DIR}/steps/step-{N}.md with Verification section:
+**ACTION:** Update `.workflow/{TASK_NAME}/steps/step-{N}.md` Verification section
+
+**STRUCTURE:**
 
 ```markdown
 ## Verification
 
 **Verifier**: Claude - {DATE}
 
-**Setup & Build:**
-- ✓ ${projectType} project setup successful
-- ✓ ${buildCommand} succeeded
-- ✓ ${testCommand} passed: {count} tests
+**Build & Setup:**
+- Build command: ${buildCommand}
+- Build result: ✓ SUCCESS (or ✗ FAILED: [error])
+- Tests command: ${testCommand}
+- Tests result: ✓ {N} tests passed (or ✗ FAILED: [which tests])
 
-**Criteria Results:**
+**Docker Verification (if applicable):**
+- ✓ docker-compose.yml validated
+- ✓ Services started successfully
+- ✓ Health checks passed
 
-1. **Criterion: [name]**
+**Migration Verification (if applicable):**
+- Migration command: ${migrateCommand}
+- Result: ✓ All migrations applied (or ✗ Failed: [which migration])
+- Evidence: [migration log or schema verification]
+
+**Criteria Verification:**
+
+1. **Criterion: {criterion text}**
    - Status: ✓ PASSED
-   - Evidence: [what tested, result]
+   - Test: {what you tested}
+   - Evidence: {proof - curl output, DB query result, test name, etc.}
 
-2. **Criterion: [name]**
+2. **Criterion: {criterion text}**
    - Status: ✗ NOT PASSED
-   - Reason: [what failed]
-   - Evidence: [proof]
+   - Reason: {what failed}
+   - Evidence: {proof of failure}
+
+[... more criteria ...]
+
+**Summary:**
+- Total criteria: N
+- Passed: M
+- Failed: K
+- Overall: ✓ PASS (or ✗ FAIL)
 ```
 
-### 9. Report to Execute
+**CRITICAL REQUIREMENTS:**
+- ✅ Every criterion must have PASS or FAIL status
+- ✅ Every criterion must have evidence
+- ✅ Build and test results documented
+- ✅ Migration results documented (if applicable)
+- ✅ NO status field updated (execute manages it)
+- ✅ NO progress.json modified
 
-Do NOT update step status—execute manages it based on Verification section results.
+### 9. Signal Completion to Execute
 
-**Completion signal:** step-{N}.md Verification section is fully filled with:
-- Build results (success or failure details)
-- Test results (all passed or specific failures)
-- Criterion verification results (each criterion PASS/FAIL with evidence)
+**COMPLETION SIGNAL:** step-{N}.md Verification section is FULLY FILLED
 
-**In Subagent mode:** Agent naturally completes when this step finishes  
-**In Current Session mode:** Skill naturally completes when this step finishes
+Execute will:
+1. Read Verification section
+2. Check if all criteria have PASS/FAIL status
+3. Count passed vs failed
+4. Set progress.json status:
+   - All criteria PASSED → status = `complete`
+   - Any criterion FAILED → status = `needs-fix`
 
-Execute will read Verification section to determine:
-- If all criteria PASSED → set status = `complete`
-- If any criteria FAILED → set status = `needs-fix`
-
----
-
-## Critical
-
-**MUST:**
-- ✅ Load .workflow-config.json and extract projectType, buildCommand, testCommand
-- ✅ Build project using buildCommand—fail if errors
-- ✅ Run tests using testCommand from config—fail if any fail
-- ✅ Handle language-specific test output (don't assume npm format)
-- ✅ Verify migrations were applied (if migrateCommand is set)—implementer already ran them
-- ✅ Verify docker (if docker-compose.yml exists) - language-independent
-- ✅ Manually test EACH criterion with evidence
-- ✅ Report clear PASS or FAIL
-
-**NEVER:**
-- ❌ Update step status
-- ❌ Update progress.json
-- ❌ Skip manual testing
-- ❌ Fix issues (report them)
+**HOW IT WORKS:**
+- In subagent mode: Agent naturally completes when this step finishes
+- Execute sees Verification section filled with results → knows we're done → updates status
 
 ---
 
-## Proof Required
+## Rules - Critical for Success
 
-**PASS needs:**
-- ✓ Build succeeded
-- ✓ All tests passed
-- ✓ Each criterion tested with evidence
+### MUST DO ✅
 
-**NOT proof:**
-- ✗ "Code looks good"
-- ✗ "Should work"
+| Rule | Why | How to Verify |
+|------|-----|---|
+| Load .workflow-config.json | Different projects use different commands | Check buildCommand/testCommand from config |
+| Build using buildCommand | Must ensure code compiles/builds | Run exact command from config, check exit code 0 |
+| Run testCommand from config | Tests validate implementation | Run exact command from config, check exit code 0 |
+| Handle language-specific output | Different languages report results differently | Use table above to detect PASS/FAIL by type |
+| Test each criterion | Each criterion has testable proof | Test with curl, DB query, file check, etc. |
+| Collect evidence | Proof must be concrete, not assumed | Document what you tested and result |
+| Verify migrations if set | Data structure changes must work | Check if migrateCommand != null, verify if set |
+| Fill Verification section fully | Execute reads this to determine status | Every section filled: build, tests, criteria |
+| Report PASS or FAIL for each criterion | No ambiguity about what passed/failed | Each criterion has explicit PASS or FAIL |
+
+### NEVER DO ❌
+
+| Rule | Why | Consequence |
+|---|---|---|
+| Update step status field | Execute manages all state | Causes sync problems |
+| Update progress.json | Only execute modifies this | Causes state corruption |
+| Skip manual testing | Automated tests don't cover all requirements | Criteria not validated |
+| Fix code | That's implementer's job, not verifier | Blurs responsibilities |
+| Assume "should work" | Need concrete proof | Fail step unexpectedly |
+| Use hardcoded test command | Projects use different test frameworks | Tests don't run |
+
+## Completion Checklist
+
+Before finishing, verify:
+
+```
+✅ Build step completed successfully
+✅ All tests passed (testCommand exit code 0)
+✅ Migrations verified if migrateCommand set
+✅ Docker verified if docker-compose.yml exists
+✅ Each criterion tested with concrete evidence
+✅ Each criterion has explicit PASS or FAIL status
+✅ Verification section FULLY FILLED with:
+   - Build and test results
+   - Migration results (or "not needed")
+   - Criterion verification with evidence
+✅ Status field NOT touched
+✅ progress.json NOT modified
+```
+
+If ANY item unchecked: RETURN to that step, fix it, re-verify
+
+## Evidence Standards
+
+**What counts as evidence (PASS examples):**
+- ✓ curl response: `HTTP/1.1 201 Created`
+- ✓ Database query: `SELECT * FROM users WHERE id=5` returns row
+- ✓ Test output: `12 passed in 1.5s`
+- ✓ File exists: `ls -l target/application.jar` shows size > 0
+- ✓ Schema check: `\dt` shows expected tables
+
+**What does NOT count (FAIL examples):**
+- ✗ "Code looks correct"
+- ✗ "Should work fine"
 - ✗ "Tests should pass"
+- ✗ "Seems good to me"
+- ✗ "Likely works"

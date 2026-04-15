@@ -11,26 +11,87 @@ Execute manages workflow state and coordinates step execution in strict order.
 
 ---
 
+## Execution Decision Tree
+
+```
+START: /workflow:execute
+  │
+  ├─→ Step 1: Read State
+  │    └─→ File exists? NO  → STOP (tell user to run /workflow:bootstrap)
+  │    └─→ File exists? YES → Continue
+  │
+  ├─→ Step 1.5: Confirm Subagent
+  │    └─→ workflow_status == "initialized"? YES → Ask confirmation
+  │    │                                     NO  → Skip (resume mode)
+  │    └─→ User agrees? YES → Continue to Step 2
+  │                     NO  → EXIT (user can resume later)
+  │
+  ├─→ Step 2: Show What's Next
+  │    └─→ Inform user based on current_step.status
+  │
+  ├─→ Step 3: Ask Mode (ALWAYS - every execution)
+  │    └─→ User chooses: mode = 1 (Manual) or 2 (Final)
+  │    └─→ If workflow_status == "initialized": set to "in-progress"
+  │
+  ├─→ Step 4: Check Approval Needed
+  │    └─→ (mode == 1 AND status == "complete")? YES → Ask approval
+  │    │                                          NO  → Skip
+  │    └─→ User approves? YES → status = "complete", continue
+  │                      NO  → status = "needs-fix", loop back
+  │
+  ├─→ Step 5: Execute if Work Needed
+  │    └─→ status IN ["pending", "needs-fix", "verification"]? YES → Dispatch agent
+  │    │                                                        NO  → status already complete
+  │    └─→ After agent returns:
+  │        ├─→ If was implementing: status = "verification"
+  │        └─→ If was verifying: status = "complete" or "needs-fix"
+  │
+  └─→ LOOP: Back to Step 1 until all steps "complete"
+       └─→ All complete? YES → Finalize → END
+                          NO  → Continue loop
+```
+
+---
+
+## Step Execution Conditions
+
+| Step | When to Run | When to Skip | Signal to Continue |
+|------|-----------|--------------|-------------------|
+| **1.5** | workflow_status == "initialized" | Any other status | User confirms OR exits |
+| **4** | mode==1 AND status=="complete" | Any other condition | User approves OR requests fix |
+| **5** | status IN [pending, needs-fix, verification] | status=="complete" | Agent returns with new status |
+
+---
+
 ## Procedure - Exact Order (Non-Negotiable)
 
 ### Step 1: Read Current State
 
-1. Check progress.json exists (if not: STOP, tell user to run `/workflow:bootstrap`)
-2. Read `.workflow/{TASK_NAME}/PLAN.md` (title, description, created date)
-3. Read `.workflow/{TASK_NAME}/progress.json` — **THIS IS THE SOURCE OF TRUTH**
-   - Extract: task_name, mode, workflow_status, current_step, all step statuses
-4. Read `.workflow/{TASK_NAME}/.workflow-config.json` (projectType, buildCommand, testCommand, migrateCommand)
-5. Find current step (progress.json current_step) and its status
-6. Check current_step and its status from progress.json
+**GUARD:** progress.json must exist (if not: STOP and tell user to run `/workflow:bootstrap`)
 
-**Output to user:**
+**PRE-CONDITION:** None (entry point)
+
+**PROCEDURE:**
+1. Verify `.workflow/{TASK_NAME}/progress.json` exists
+   - ✅ If exists: Continue to file reads
+   - ❌ If missing: STOP—user must run `/workflow:bootstrap`
+2. Read `.workflow/{TASK_NAME}/PLAN.md` → Extract: title, description, created date
+3. Read `.workflow/{TASK_NAME}/progress.json` (SOURCE OF TRUTH)
+   - Extract: task_name, mode, workflow_status, current_step, all step statuses, iterations
+4. Read `.workflow/{TASK_NAME}/.workflow-config.json` → Extract: projectType, buildCommand, testCommand, migrateCommand
+5. Locate current step from progress.json.current_step
+6. Locate current step's status from progress.json.steps[current_step].status
+
+**POST-CONDITION:** All 4 files loaded into memory, current_step and its status identified
+
+**OUTPUT TO USER:**
 ```
 Current state:
 - Workflow: {TASK_NAME}
-- Mode: {Step Manual Approve or Final Approve} (or 'Not set' if null)
+- Mode: {Step Manual Approve (mode=1) / Final Approve (mode=2) / Not set}
 - Current step: {N} ({STEP_NAME})
-- Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
-- Workflow status: {initialized/in-progress/paused/completed}
+- Current status: {pending|implementation|verification|awaiting-approval|needs-fix|complete}
+- Workflow status: {initialized|in-progress|paused|completed}
 - Iteration: {current iteration count}
 ```
 
@@ -38,10 +99,15 @@ Current state:
 
 ### Step 1.5: Confirm Subagent Execution (First Run Only)
 
-**If workflow_status is "initialized" (first execution):**
+**GUARD:** ONLY execute this step if workflow_status == "initialized"
+- ✅ If "initialized": Execute Step 1.5
+- ✅ If "in-progress", "paused", or "completed": SKIP to Step 2
 
-This workflow uses subagents for implementation and verification. Subagents are isolated AI agents that will execute steps independently.
+**PRE-CONDITION:** workflow_status must be exactly "initialized" (from Step 1 read)
 
+**PROCEDURE:**
+
+If workflow_status == "initialized":
 ```
 AskUserQuestion:
   question: "This workflow will use subagents for implementation and verification. Continue?"
@@ -51,58 +117,85 @@ AskUserQuestion:
     - "Stop - Cancel workflow execution"
 ```
 
-**If user agrees:**
-- Continue to Step 2
+**DECISION:**
+- **User selects "Agree"**: Continue to Step 2
+- **User selects "Stop"**: Exit /workflow:execute (user can resume later with same command)
 
-**If user stops:**
-- Exit workflow, user can run `/workflow:execute` again later if they change their mind
+If workflow_status != "initialized" (resume mode):
+- Skip this step entirely, continue to Step 2
 
-**If workflow_status is NOT "initialized" (resuming):**
-- Skip this step, continue to Step 2
+**POST-CONDITION:** 
+- If user agreed: proceed to Step 2
+- If user stopped: workflow paused, no state changes made
+- If resuming: skipped, no state changes made
 
 ---
 
 ### Step 2: Show What Will Happen Next
 
-Based on current step status, tell user what comes next:
+**GUARD:** Must have completed Step 1 (all files loaded)
 
+**PRE-CONDITION:** current_step and its status known from Step 1
+
+**PROCEDURE:** Based on current_step.status, determine and tell user what's next:
+
+| Current Status | Next Action | Message to User |
+|---|---|---|
+| `pending` | Implement | "Will implement step {N}: {STEP_NAME}" |
+| `implementation` | Implement | "Continuing implementation of step {N}" |
+| `needs-fix` | Re-implement | "Will re-implement step {N} (iteration {I+1})" |
+| `verification` | Verify | "Will verify step {N}" |
+| `awaiting-approval` | Ask approval | "Step {N} verified. Need your approval to continue." |
+| `complete` | Move next | "Step {N} complete. Will move to step {N+1}" |
+| All steps `complete` | Finalize | "All steps complete. Will finalize workflow." |
+
+**Also explain mode behavior:**
 ```
-Next action will be:
-- If status is pending/needs-fix → Implement step {N}
-- If status is verification → Verify step {N}
-- If status is awaiting-approval → Ask for approval (Step Manual Approve (mode = 1))
-- If status is complete → Move to step {N+1}
-- If all complete → Finalize workflow
+Current Mode: {Step Manual Approve (mode=1) or Final Approve (mode=2) or Not set}
+
+If Step Manual Approve (mode=1):
+  → After implementation: Verifier tests → You approve → Next step
+
+If Final Approve (mode=2):
+  → After implementation: Verifier tests → Auto-continue (no approval)
 ```
 
-**With current Mode {1 or 2}:**
-```
-Step Manual Approve (mode = 1): After implementer finishes → Verifier tests → You approve → Next step
-Final Approve (mode = 2): After implementer finishes → Verifier tests → Automatic next step (no approval)
-```
+**POST-CONDITION:** User understands what will happen next
 
 ---
 
 ### Step 3: Ask About Workflow Mode (Every Execution)
 
-**ALWAYS ask this step - user can choose/change mode:**
+**GUARD:** ALWAYS execute this step—no conditions, every execution
+- First run: Set mode for the first time
+- Resume: User can change mode if desired
+
+**PRE-CONDITION:** Step 1 and 1.5 completed
+
+**PROCEDURE:** Present mode choice to user:
 
 ```
 AskUserQuestion:
   question: "How should approval work for this execution?"
   header: "Workflow Approval Mode"
   options:
-    - "Step Manual Approve - I will approve each step after verification"
-    - "Final Approve - Approve only at the end after all steps verified"
+    - "Step Manual Approve (mode=1) - I approve each step after verification"
+    - "Final Approve (mode=2) - Approve only at the end after all steps verified"
 ```
 
-**Modes Explained:**
-- **Step Manual Approve**: After verifier tests each step → you approve before next step
-- **Final Approve**: All steps run and verify automatically, you approve once at end
+**Mode Explanation Table:**
 
-**User action:**
-- Update progress.json: `mode` field = 1 (Step Manual Approve) or 2 (Final Approve)
-- If workflow_status still "initialized", also set to "in-progress"
+| Mode | Behavior | When You're Asked to Approve |
+|------|----------|-----|
+| **Step Manual Approve (mode=1)** | After each step: implement → verify → PAUSE for your approval → next step | After each step completes verification |
+| **Final Approve (mode=2)** | All steps: implement → verify → auto-continue (no pauses) | Once at the very end after all complete |
+
+**ACTIONS AFTER USER CHOOSES:**
+1. Update progress.json: `mode` field = 1 or 2 (user's choice)
+2. If workflow_status == "initialized": set workflow_status = "in-progress" and started = now (ISO8601)
+3. If workflow_status != "initialized": keep as is (resume mode doesn't change status)
+
+**POST-CONDITION:** mode is set in progress.json, user knows what will happen
 
 **Then continue to Step 4.**
 
@@ -110,47 +203,79 @@ AskUserQuestion:
 
 ### Step 4: Check If Step Approval Needed (Step Manual Approve Mode Only)
 
-**ONLY if ALL conditions are true:**
-- User chose "Step Manual Approve" mode in Step 3 (mode = 1)
-- Current step status is `complete` (verifier just finished)
+**GUARD - ONLY EXECUTE IF ALL CONDITIONS TRUE:**
+```
+(mode == 1) AND (current_step.status == "complete")
+```
 
-**If conditions met, ask for approval:**
+If either condition false: SKIP this entire step, go to Step 5
 
+| Condition | Value | Action |
+|-----------|-------|--------|
+| mode == 1? | YES & status=="complete" | Execute Step 4 |
+| mode == 1? | NO (mode==2) | SKIP → Step 5 |
+| status=="complete"? | NO | SKIP → Step 5 |
+
+**PRE-CONDITION:** Both conditions must be true:
+1. mode == 1 (Step Manual Approve was chosen in Step 3)
+2. current_step.status == "complete" (verifier just finished and marked complete)
+
+**PROCEDURE (if executing):**
+
+Present approval question:
 ```
 AskUserQuestion:
-  question: "Step {N} passed verification. Approve and continue to next step?"
+  question: "Step {N}: {STEP_NAME} passed verification. Approve and continue to next step?"
+  header: "Step Approval"
   options:
-    - "Approve - Mark complete and continue"
+    - "Approve - Mark complete and move to next step"
     - "Request changes - Back to implementation"
 ```
 
-**If user approves:**
-- Update progress.json: step status = `complete`
-- Loop back to Step 1 to move to next step (if more steps exist)
-- If all complete → Call finalize skill
+**DECISION BASED ON USER RESPONSE:**
 
-**If user requests changes:**
-- Update progress.json: step status = `needs-fix`
-- Loop back to Step 1 (will go to Step 5 to implement again)
+**If user selects "Approve":**
+1. Record approval in progress.json: approvals.mode_1_manual_approvals += {step: N, approved_at: now, approved_by: "user"}
+2. Ensure step status = "complete" (should already be)
+3. Clear awaiting_approval_since = null
+4. Loop back to Step 1 (to handle next step if more exist, or finalize if all done)
 
-**If NOT Step Manual Approve mode:** Skip this step, continue to Step 5
+**If user selects "Request changes":**
+1. Update progress.json: step status = "needs-fix"
+2. Increment step.iteration (prepare for re-implementation)
+3. Loop back to Step 1 (will go to Step 5 for re-implementation)
 
-**If step status is NOT `complete`:** Skip this step, continue to Step 5
+**POST-CONDITION:** 
+- If approved: step marked complete, approval recorded, continue to next
+- If rejected: step marked needs-fix, ready for re-implementation
+- Either way: progress.json updated, loop restarts
 
 ---
 
 ### Step 5: Execute with Subagent (If Work Needed)
 
-**Skip this step if:**
-- Step status is `complete` and approval already handled in Step 4
+**GUARD - ONLY EXECUTE IF:**
+```
+current_step.status IN ["pending", "needs-fix", "verification"]
+```
 
-**Execute ONLY if:**
-- Step status is `pending` or `needs-fix` (need to implement)
-- OR step status is `verification` (need to verify)
+If status == "complete": SKIP this step, loop back to Step 1
 
-Dispatch isolated Agent subagent:
+| Status | Action |
+|--------|--------|
+| `pending` | Execute (implement) |
+| `needs-fix` | Execute (re-implement) |
+| `verification` | Execute (verify) |
+| `complete` | SKIP (already done) |
 
-**If implementing (step status = pending/needs-fix):**
+**PRE-CONDITION:** 
+- progress.json loaded and mode set
+- current step identified
+- status is NOT "complete"
+
+**PROCEDURE:**
+
+**IF implementing (status = pending or needs-fix):**
 ```python
 Agent(
   description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
@@ -168,15 +293,16 @@ Config:
 - testCommand: {TEST_COMMAND}
 - migrateCommand: {MIGRATE_COMMAND}
 
-Your step is complete when:
-- Code changes implemented and committed
-- Tests pass
-- step-{N}.md Implementation section filled with changes and results
+Completion signal: step-{N}.md Implementation section is filled with:
+- List of files modified/created
+- Summary of changes
+- Test results and migration results (if any)
+- Git commit created
 """
 )
 ```
 
-**If verifying (step status = verification):**
+**IF verifying (status = verification):**
 ```python
 Agent(
   description: f"Verify {TASK_NAME} step {N}: {STEP_NAME}",
@@ -194,23 +320,46 @@ Config:
 - testCommand: {TEST_COMMAND}
 - migrateCommand: {MIGRATE_COMMAND}
 
-Your step is complete when:
-- All tests pass
-- All criteria verified
-- step-{N}.md Verification section filled with results and pass/fail status
+Completion signal: step-{N}.md Verification section is filled with:
+- Build and test results
+- Each criterion tested with PASS/FAIL status
+- Evidence for each criterion
 """
 )
 ```
 
-**After Agent returns:**
-1. Read `.workflow/{TASK_NAME}/steps/step-{N}.md` Implementation or Verification section to see what agent did
-   - Check if implementation section is filled (code completed)
-   - Check if verification section is filled with PASS/FAIL results
-2. Update progress.json step status:
-   - If implementing: set status = `verification`
-   - If verifying: set status = `complete` (if all criteria pass) or `needs-fix` (if any fail)
-3. If Step Manual Approve (mode = 1) and step is now `complete`: set `awaiting_approval_since` to current ISO8601 timestamp
-4. Loop back to Step 1 (to handle new status)
+**AFTER AGENT RETURNS:**
+
+1. **Check Completion Signal:**
+   - If implementing: Read step-{N}.md → Implementation section must be filled
+   - If verifying: Read step-{N}.md → Verification section must be filled with criterion results
+
+2. **Update progress.json Step Status:**
+   ```
+   If was implementing (old status pending/needs-fix):
+     → new status = "verification"
+   
+   If was verifying (old status verification):
+     → If all criteria PASSED: new status = "complete"
+     → If any criterion FAILED: new status = "needs-fix"
+   ```
+
+3. **If Step Manual Approve Mode AND now complete:**
+   - Set awaiting_approval_since = now (ISO8601)
+   - This marks workflow as "paused" waiting for user approval
+
+4. **Loop back to Step 1** to process new status
+   - Step 1: Read updated state
+   - Step 1.5: Skip (already in-progress)
+   - Step 2: Show what's next based on new status
+   - Step 3: Ask mode again
+   - Step 4: If mode==1 AND status==complete, ask approval
+   - Step 5: If not complete, continue or finalize
+
+**POST-CONDITION:** 
+- step-{N}.md has Implementation or Verification section filled
+- progress.json updated with new status
+- Ready to loop back to Step 1
 
 ---
 

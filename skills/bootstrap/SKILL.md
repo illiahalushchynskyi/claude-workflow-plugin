@@ -24,33 +24,105 @@ User provides: task name, task title, description, and step list with verificati
 
 Creates `.workflow/TASK_NAME/` directory with PLAN.md, progress.json, step files, and config.
 
+---
+
+## Project Type Reference Table
+
+Use this table to detect project type and set build/test commands:
+
+| Detection | Type | Build Command | Test Command | Migrate Command |
+|-----------|------|---|---|---|
+| `package.json` exists | `node` | `npm run build` | `npm test` | `npm run migrate` |
+| `composer.json` exists | `php` | (none) | `composer test` or `phpunit` | (varies) |
+| `pyproject.toml` or `requirements.txt` | `python` | `python setup.py build` | `pytest` | `alembic upgrade head` |
+| `Cargo.toml` exists | `rust` | `cargo build --release` | `cargo test` | (none typically) |
+| `go.mod` exists | `go` | `go build ./...` | `go test ./...` | (varies) |
+| `pom.xml` exists | `java-maven` | `mvn clean compile` | `mvn test` | (varies) |
+| `build.gradle` or `build.gradle.kts` | `java-gradle` | `gradle build` | `gradle test` | (varies) |
+| `Gemfile` exists | `ruby` | (varies) | `rspec` or `rake test` | (varies) |
+| `CMakeLists.txt` exists | `cpp-cmake` | `cmake --build .` | `ctest` | (none) |
+| `Makefile` exists | `generic-make` | `make` | `make test` | (varies) |
+| None of above | `other` | Ask user | Ask user | Ask user |
+
+**Detection Order:** Check in the order above. Use first match.
+
+---
+
 ## Your Procedure
 
 ### Step 1: Validate Input
 
-Ask user for missing information:
-- Task name (lowercase, hyphens only)
-- Task title
-- Description
-- List of steps with:
-  - Step name
-  - Goal
-  - Verification criteria (at least 3 per step - these are what verifier will check)
+**GUARD:** STOP if user cannot provide all required information
 
-Use AskUserQuestion if any field missing.
+**PRE-CONDITION:** None (entry point)
 
-**Verification Criteria Format:**
-Each criterion must be:
-- **Specific** - not vague like "it works" or "feature is done"
-- **Testable** - can verify with concrete proof (curl output, DB query, test output, etc.)
-- **Independent** - can verify each criterion separately
-- **Examples:**
-  - ✓ GOOD: "API POST /users returns 201 status and user object with id field"
-  - ✓ GOOD: "Database table contains inserted user record with correct name"
-  - ✗ BAD: "User endpoint works correctly"
-  - ✗ BAD: "Everything is done"
+**REQUIRED FIELDS** (ask for all):
+1. **Task name** - format: lowercase, hyphens only (e.g., `feature-auth`)
+2. **Task title** - human-readable title
+3. **Description** - what this workflow accomplishes
+4. **Steps** - list of steps with:
+   - Step name
+   - Step goal (one sentence: what this step accomplishes)
+   - Verification criteria (minimum 3 per step—these are what verifier will check)
 
-When user provides verification criteria, validate they meet this standard. Ask for clarification if criteria are too vague.
+**PROCEDURE:**
+
+Use AskUserQuestion for any missing field. Present fields one at a time:
+
+```
+Question 1: Task Name
+  - Format: lowercase, hyphens only
+  - Example: "feature-auth", "fix-pagination"
+  - If user provides invalid format: suggest correction
+
+Question 2: Task Title
+  - Human-readable description
+  - Example: "Add user authentication system"
+
+Question 3: Description
+  - What does this workflow accomplish?
+  - Example: "Implement JWT-based authentication..."
+
+Question 4: Steps List
+  - How many steps? (user provides count)
+  - For each step:
+    - Step name
+    - Goal (one sentence)
+    - Verification criteria (at least 3)
+```
+
+**VERIFICATION CRITERIA VALIDATION:**
+
+Each criterion MUST be:
+- **Specific** - Not vague ("it works", "feature is done")
+- **Testable** - Can verify with concrete proof (curl response, database query result, test output, etc.)
+- **Independent** - Can verify each criterion separately
+
+**GOOD Examples:**
+- ✓ "API endpoint POST /users returns 201 status and user object with id field"
+- ✓ "Database table 'users' contains inserted record with correct name"
+- ✓ "All unit tests pass with exit code 0"
+
+**BAD Examples:**
+- ✗ "User endpoint works correctly"
+- ✗ "Everything is done"
+- ✗ "Feature implemented"
+
+**VALIDATION LOGIC:**
+
+For each criterion user provides:
+```
+Is it specific? (NOT vague wording)
+  NO → Ask for clarification
+Is it testable? (Has concrete proof method)
+  NO → Ask what concrete evidence would prove this
+Is it independent? (Can verify separately)
+  NO → Ask user to split into separate criteria
+```
+
+If all criteria valid: Continue to Step 2
+
+**POST-CONDITION:** All 5 fields validated, criteria meet standards
 
 ### Step 2: Create Directory Structure
 
@@ -152,32 +224,68 @@ Example: "✓ API endpoint POST /users returns 201 status and user object with i
 
 ### Step 5: Detect Project Type and Migration Framework
 
-**Detect project language/build system** by checking for these files (in order):
+**GUARD:** User must provide task description before reaching this step
 
-1. `package.json` → `node`
-2. `composer.json` → `php`
-3. `pyproject.toml` or `requirements.txt` → `python`
-4. `Cargo.toml` → `rust`
-5. `go.mod` → `go`
-6. `pom.xml` → `java-maven`
-7. `build.gradle` or `build.gradle.kts` → `java-gradle`
-8. `Gemfile` → `ruby`
-9. `CMakeLists.txt` → `cpp-cmake`
-10. `Makefile` → `generic-make`
-11. If none found → `other` (ask user for build/test commands)
+**PRE-CONDITION:** Task name and description received from user
 
-**Detect migration framework** (if applicable) by checking for:
-- Node.js: `knex.js`, `sequelize`, `typeorm` migrations directories
-- Python: `alembic/`, `migrations/` (SQLAlchemy)
-- Go: `migrations/`, `sqlc/` directories or sql-migrate config
-- Rust: `sqlx/migrations/`, `diesel/migrations/`
-- Ruby: `db/migrate/`
-- Java: `db/changelog/` (Liquibase) or `src/main/resources/db/migration/` (Flyway)
+**PROCEDURE:**
 
-Load the detected project type's commands from `skills/templates/commands.yaml`. If detection fails or commands are missing, ask user to provide:
-- Build command (e.g., `cargo build`)
-- Test command (e.g., `cargo test`)
-- Optional: Migrate command (e.g., `sqlx migrate run`, `npm run migrate`, `alembic upgrade head`)
+**1. Detect Project Type:**
+
+Check for files **in this order**. Use first match:
+
+```
+1. package.json       → type = "node"
+2. composer.json      → type = "php"
+3. pyproject.toml OR requirements.txt → type = "python"
+4. Cargo.toml         → type = "rust"
+5. go.mod             → type = "go"
+6. pom.xml            → type = "java-maven"
+7. build.gradle or build.gradle.kts → type = "java-gradle"
+8. Gemfile            → type = "ruby"
+9. CMakeLists.txt     → type = "cpp-cmake"
+10. Makefile          → type = "generic-make"
+11. None found        → type = "other" (ask user)
+```
+
+**2. Detect Migration Framework (if applicable):**
+
+Check for migration config files by project type:
+
+| Type | Check For | If Found |
+|------|-----------|----------|
+| `node` | `knex.js`, `sequelize`, `typeorm` directories | Extract migrate command |
+| `python` | `alembic/`, `migrations/` | Extract migrate command |
+| `go` | `migrations/`, `sqlc/` directories | Extract migrate command |
+| `rust` | `sqlx/migrations/`, `diesel/migrations/` | Extract migrate command |
+| `ruby` | `db/migrate/` | Use `rake db:migrate` |
+| `java-*` | `db/changelog/`, `src/main/resources/db/migration/` | Extract migrate command |
+
+If migration framework found: set migrateCommand in config.json
+If not found: set migrateCommand = null in config.json
+
+**3. Get Build/Test Commands:**
+
+Look up detected type in **Project Type Reference Table** (above) and extract:
+- buildCommand (standard for that type)
+- testCommand (standard for that type)
+- migrateCommand (if framework detected)
+
+**4. If Type = "other":**
+
+Ask user via AskUserQuestion:
+```
+question: "Please provide your project's build and test commands"
+options:
+  - Custom build and test commands (requires manual entry)
+```
+
+Then ask:
+- "What is your build command?" (e.g., `make build`)
+- "What is your test command?" (e.g., `make test`)
+- "Do you have a migration command?" (optional, e.g., `make migrate`)
+
+**POST-CONDITION:** projectType determined, build/test commands identified
 
 ### Step 5.5: Create .workflow-config.json
 
@@ -208,37 +316,81 @@ Create `.workflow/TASK_NAME/.workflow-config.json`:
 
 ### Step 6: Initialize progress.json
 
-Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking. This is the **SOURCE OF TRUTH** for all workflow state.
+**GUARD:** All previous steps completed before creating progress.json
 
-**Example - 2-step workflow initialization:**
+**PRE-CONDITION:** All fields from Step 1 validated, project type detected from Step 5
+
+**SOURCE OF TRUTH:** progress.json is THE ONLY place execute reads/writes workflow state
+
+**STRUCTURE:** Create `.workflow/TASK_NAME/progress.json` with this schema:
 
 ```json
 {
-  "task_name": "{TASK_NAME}",
+  "task_name": "string",
   "mode": null,
   "workflow_status": "initialized",
-  "created": "{TODAY}",
+  "created": "YYYY-MM-DD",
   "started": null,
   "completed": null,
   "current_step": 1,
   "steps": {
-    "1": {
-      "name": "{Step 1 Name}",
-      "status": "pending",
-      "iteration": 1,
-      "awaiting_approval_since": null
-    },
-    "2": {
-      "name": "{Step 2 Name}",
-      "status": "pending",
-      "iteration": 1,
-      "awaiting_approval_since": null
-    }
+    "1": {"name": "string", "status": "pending", "iteration": 1, "awaiting_approval_since": null},
+    "2": {"name": "string", "status": "pending", "iteration": 1, "awaiting_approval_since": null}
   },
   "approvals": {
     "mode_1_manual_approvals": []
   }
 }
+```
+
+**Field Definitions:**
+
+**Workflow-level:**
+| Field | Type | Initial Value | Purpose |
+|-------|------|---|---|
+| `task_name` | string | User input | Task identifier |
+| `mode` | number or null | `null` | Approval mode: `1` = Step Manual, `2` = Final, `null` = not set yet |
+| `workflow_status` | string | `"initialized"` | Overall state: initialized→in-progress→paused→completed |
+| `created` | string (YYYY-MM-DD) | Today | Immutable creation date |
+| `started` | string (ISO8601) or null | `null` | Set by execute when first step begins |
+| `completed` | string (ISO8601) or null | `null` | Set by finalize when workflow ends |
+| `current_step` | number | `1` | Currently active step |
+
+**Per-Step (steps.{N}):**
+| Field | Type | Initial Value | Purpose |
+|-------|------|---|---|
+| `name` | string | Step name | Reference to step-N.md |
+| `status` | string | `"pending"` | pending→implementation→verification→awaiting-approval→needs-fix→complete |
+| `iteration` | number | `1` | Increments when step retried after needs-fix |
+| `awaiting_approval_since` | ISO8601 or null | `null` | Set by execute when status = awaiting-approval (Mode 1 pause tracking) |
+
+**Approvals:**
+| Field | Type | Initial Value | Purpose |
+|-------|------|---|---|
+| `approvals.mode_1_manual_approvals` | array | `[]` | History: `[{"step": N, "approved_at": "ISO8601", "approved_by": "user"}, ...]` |
+
+**EXAMPLE - 3-step workflow:**
+```json
+{
+  "task_name": "feature-auth",
+  "mode": null,
+  "workflow_status": "initialized",
+  "created": "2026-04-15",
+  "started": null,
+  "completed": null,
+  "current_step": 1,
+  "steps": {
+    "1": {"name": "Setup auth database", "status": "pending", "iteration": 1, "awaiting_approval_since": null},
+    "2": {"name": "Implement JWT middleware", "status": "pending", "iteration": 1, "awaiting_approval_since": null},
+    "3": {"name": "Add login endpoint", "status": "pending", "iteration": 1, "awaiting_approval_since": null}
+  },
+  "approvals": {
+    "mode_1_manual_approvals": []
+  }
+}
+```
+
+**POST-CONDITION:** progress.json created with all steps initialized to pending
 ```
 
 **Field Definitions:**
@@ -289,18 +441,43 @@ Create `.workflow/TASK_NAME/progress.json` for detailed step execution tracking.
 
 ### Step 7: Verify Files Created
 
-Verify:
-- [ ] PLAN.md exists with correct YAML frontmatter (status: pending, created date, title, description only)
-- [ ] All step-N.md files exist with correct frontmatter (step_number, name, created only - NO status field)
-- [ ] progress.json is valid JSON:
-  - workflow_status: "initialized"
-  - mode: null (will be set by execute)
-  - All steps at "pending" status with iteration: 1
-  - workflow-level started and completed are null
-  - approvals.mode_1_manual_approvals is empty array
-- [ ] .workflow-config.json exists with taskName, projectType, buildCommand, testCommand, migrateCommand fields
-- [ ] buildCommand and testCommand are valid for detected projectType
-- [ ] No execution settings in .workflow-config.json (only project config)
+**GUARD:** Cannot continue if verification fails
+
+**VERIFICATION CHECKLIST:**
+
+| File | Check | Must Pass |
+|------|-------|-----------|
+| **PLAN.md** | Frontmatter has ONLY: `status: pending`, `created: YYYY-MM-DD` | ✅ YES |
+| **PLAN.md** | Body has title and description (no step table) | ✅ YES |
+| **step-N.md** | Frontmatter has ONLY: `step_number`, `name`, `created` | ✅ YES |
+| **step-N.md** | NO status field in frontmatter | ✅ YES |
+| **step-N.md** | Goal section filled | ✅ YES |
+| **step-N.md** | Verification Criteria section lists all criteria | ✅ YES |
+| **progress.json** | Valid JSON (no syntax errors) | ✅ YES |
+| **progress.json** | `workflow_status: "initialized"` | ✅ YES |
+| **progress.json** | `mode: null` (will be set by execute) | ✅ YES |
+| **progress.json** | All steps have `status: "pending"` | ✅ YES |
+| **progress.json** | All steps have `iteration: 1` | ✅ YES |
+| **progress.json** | `started: null`, `completed: null` | ✅ YES |
+| **progress.json** | `approvals.mode_1_manual_approvals: []` | ✅ YES |
+| **.workflow-config.json** | Has: taskName, projectType, buildCommand, testCommand, migrateCommand | ✅ YES |
+| **.workflow-config.json** | No mode, no approval settings, no execution config | ✅ YES |
+| **.workflow-config.json** | buildCommand is valid for projectType | ✅ YES |
+| **.workflow-config.json** | testCommand is valid for projectType | ✅ YES |
+
+**VALIDATION PROCEDURE:**
+
+```bash
+# For each check:
+if [ NOT_TRUE ]; then
+  echo "ERROR: [Check Name] failed"
+  exit 1
+fi
+```
+
+If ANY check fails: STOP and report which check failed and why
+
+**POST-CONDITION:** All files exist and pass validation
 
 ### Step 8: Report to User
 
