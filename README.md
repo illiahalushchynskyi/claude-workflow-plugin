@@ -9,7 +9,9 @@ The Workflow System provides a structured framework for executing complex develo
 - **Implementer Agent** — executes code changes for each step
 - **Verifier Agent** — tests changes and gates advancement to the next step
 
-All progress is tracked in markdown files with structured frontmatter, making workflows portable across machines and git-trackable.
+All progress is tracked in two complementary files:
+- **PLAN.md** — Human-readable status summary (pending, in-progress, completed)
+- **progress.json** — System source of truth with detailed timestamps, approvals, and state transitions
 
 ## Key Features
 
@@ -28,10 +30,12 @@ All progress is tracked in markdown files with structured frontmatter, making wo
 
 ### Advanced Features
 
+- **Granular Progress Tracking** — progress.json tracks workflow status, step status, timestamps, iterations, approvals, and pause/resume state
+- **Pause & Resume Support** — Workflows can pause (awaiting approval in Mode 1) and resume from exact state without re-executing completed steps
 - **Schema Validation** — All PLAN.md and step files validated against JSON schemas
 - **Cross-Machine Portability** — File-based state, works on any machine with git and Claude Code
-- **Persistent Audit Trail** — Every iteration timestamped, all decisions recorded
-- **Issue Tracking & Fixes** — Verifier reports issues, implementer fixes in same cycle
+- **Persistent Audit Trail** — Every iteration timestamped, all decisions recorded in progress.json
+- **Issue Tracking & Fixes** — Verifier reports issues, implementer fixes in same cycle, iteration count increments
 - **Mode Flexibility** — Choose mode before work begins, applies to entire workflow
 
 ## Installation
@@ -113,9 +117,10 @@ See [INSTALLATION.md](docs/INSTALLATION.md) for detailed setup and troubleshooti
 ### 3. View Progress and Approve
 
 After execution:
-- Read `.workflow/feature-auth-system/steps/step-*.md` to review implementer and verifier notes
-- Check `.workflow/feature-auth-system/PLAN.md` for overall status
-- Approve or request changes
+- Check `.workflow/feature-auth-system/progress.json` for detailed status and timestamps
+- Read `.workflow/feature-auth-system/PLAN.md` for overall status (pending, in-progress, completed)
+- Review `.workflow/feature-auth-system/steps/step-*.md` for implementer and verifier notes
+- Approve steps or request changes (Mode 1 only)
 
 ### 4. Finalize
 
@@ -130,6 +135,7 @@ After execution:
 ## Documentation
 
 - **[QUICKSTART.md](docs/QUICKSTART.md)** — Step-by-step guide to creating your first workflow
+- **[PROGRESS_TRACKING.md](docs/PROGRESS_TRACKING.md)** — Detailed guide to PLAN.md, progress.json, status values, and pause/resume
 - **[MODE_GUIDE.md](docs/MODE_GUIDE.md)** — Detailed explanation of Mode 1 vs Mode 2, decision matrix
 - **[workflow-format.md](docs/workflow-format.md)** — Reference for PLAN.md and step file formats
 - **[INSTALLATION.md](docs/INSTALLATION.md)** — Detailed installation and machine setup

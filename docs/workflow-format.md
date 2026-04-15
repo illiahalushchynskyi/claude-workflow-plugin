@@ -8,121 +8,155 @@ This document defines the complete file format specifications for workflow tasks
 project-root/
 └── .workflow/
     └── TASK_NAME/
-        ├── PLAN.md                    # Main plan file
-        ├── .workflow-config.json      # Configuration
+        ├── PLAN.md                    # Human-readable summary
+        ├── progress.json              # System source of truth (timestamps, state)
+        ├── .workflow-config.json      # Language/command configuration
         └── steps/
-            ├── step-1-<name>.md       # Step detail file
+            ├── step-1-<name>.md       # Step definition and results
             ├── step-2-<name>.md
             └── ... (one per step)
 ```
 
-## 1. PLAN.md — Main Workflow Plan
+## 1. PLAN.md — Human-Readable Summary
 
 **Location:** `.workflow/TASK_NAME/PLAN.md`
 
-**Purpose:** Central documentation of workflow goals, steps, progress, and status.
+**Purpose:** Simple status overview for humans. Detailed execution tracking is in `progress.json`.
 
 ### Frontmatter (YAML)
 
 ```yaml
 ---
-task_name: feature-auth-system
-title: Build JWT Authentication System
+status: in-progress
 mode: 1
-status: executing
-created: 2026-04-08
-started: 2026-04-08
-completed: null
-workflow_type: feature
-author: Developer Name
-description: |
-  Implement complete JWT-based authentication system including
-  token generation, validation middleware, and user logout.
-  This enables secure API access for frontend applications.
+created: 2026-04-15
 ---
+
+# Feature: User Authentication
+
+Add JWT-based authentication system with login/logout endpoints.
+Enables secure API access for frontend applications.
+
+## Workflow Status
+
+See `progress.json` for detailed execution state, timestamps, and approvals.
 ```
 
 ### Frontmatter Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `task_name` | string | Yes | Unique task identifier (alphanumerics, hyphens, underscores) |
-| `title` | string | Yes | Human-readable task title |
-| `mode` | integer (1\|2) | Yes | Execution mode: 1=step-by-step, 2=end-to-end |
-| `status` | string | Yes | Current status: planning, executing, ready-for-review, approved, complete |
-| `created` | date (YYYY-MM-DD) | Yes | Creation date |
-| `started` | date or null | No | When execution began |
-| `completed` | date or null | No | When workflow completed |
-| `workflow_type` | string | No | Type: feature, bugfix, refactor, documentation, testing, other |
-| `author` | string | No | Primary implementer |
-| `description` | string | No | Detailed description of what this accomplishes |
+| `status` | string | Yes | Workflow status: `pending` (not started), `in-progress` (executing or paused), `completed` (finished) |
+| `mode` | number | Yes | Execution mode: 1 (step-by-step with approval) or 2 (continuous, auto-complete) |
+| `created` | string | Yes | Task creation date in YYYY-MM-DD format |
 
 ### Markdown Content
 
-Standard markdown sections:
+Simple, human-readable summary:
 
 ```markdown
-# [Task Title]
+# Feature: User Authentication
 
-## Goal
+Add JWT-based authentication system with login/logout endpoints.
+Enables secure API access for frontend applications.
 
-One sentence describing what this task accomplishes.
+## Workflow Status
 
-## Architecture & Approach
-
-2-3 sentences explaining the overall strategy and approach.
-Why this design? What are the key decisions?
-
-## Mode Selected
-
-- **Mode 1 (Step-by-Step)**: [Explain if selected]
-  Verification and human approval happen after EACH step.
-  Use for risky changes requiring high oversight.
-
-- **Mode 2 (End-to-End)**: [Explain if selected]
-  All steps execute with verification gates between them,
-  single human approval at the end. Use for low-risk changes.
-
-## Steps Overview
-
-| Step | Name | Status | Issues |
-|------|------|--------|--------|
-| 1 | Add JWT token generation | pending | — |
-| 2 | Add validation middleware | pending | — |
-| 3 | Add logout endpoint | pending | — |
-| 4 | Write comprehensive tests | pending | — |
-
-Status options: pending, implementation, verification, complete, needs-fix
-
-## Overall Progress
-
-Checkbox list tracking completion:
-
-- [ ] Step 1 Complete
-- [ ] Step 2 Complete
-- [ ] Step 3 Complete
-- [ ] Step 4 Complete
-- [ ] Human Approval
-- [ ] Commit & Merge
-
-## Step Details Location
-
-All step detail files are in: `.workflow/TASK_NAME/steps/`
-
-See the individual step-N-<name>.md files for detailed implementation notes,
-verification results, and any issues encountered.
-
-## Notes & Escalations
-
-[Any cross-step notes, blockers, or escalations]
-
-Example:
-- Database connection pool needs to be initialized in Step 2
-  before tokens are issued in Step 1 (rework step ordering)
-- Step 3 blocked by: waiting for Docker environment (external blocker)
+See `progress.json` for detailed execution state, timestamps, and approvals.
 ```
 
-## 2. step-N-<name>.md — Step Detail File
+**Key point:** PLAN.md is NOT a detailed plan. All step tracking, status, and progress lives in:
+- **progress.json** — Detailed workflow state, timestamps, step status
+- **steps/step-N.md** — Individual step details and results
+
+Use PLAN.md only as a quick reference for overall status.
+
+## 2. progress.json — System Source of Truth
+
+**Location:** `.workflow/TASK_NAME/progress.json`
+
+**Purpose:** Comprehensive execution tracking with timestamps, step status, iterations, and approvals. This is the authoritative record of workflow state.
+
+### Full Structure
+
+```json
+{
+  "task_name": "feature-auth",
+  "mode": 1,
+  "workflow_status": "in-progress",
+  "created": "2026-04-15",
+  "started": "2026-04-15T10:30:00Z",
+  "completed": null,
+  "current_step": 2,
+  "steps": {
+    "1": {
+      "name": "Add JWT generation",
+      "status": "complete",
+      "iteration": 1,
+      "implementation_start": "2026-04-15T10:30:00Z",
+      "implementation_end": "2026-04-15T10:45:00Z",
+      "verification_start": "2026-04-15T10:45:30Z",
+      "verification_end": "2026-04-15T11:00:00Z",
+      "awaiting_approval_since": "2026-04-15T11:00:05Z",
+      "approval_date": "2026-04-15T11:05:00Z"
+    },
+    "2": {
+      "name": "Add validation middleware",
+      "status": "awaiting-approval",
+      "iteration": 1,
+      "implementation_start": "2026-04-15T11:05:30Z",
+      "implementation_end": "2026-04-15T11:20:00Z",
+      "verification_start": "2026-04-15T11:20:30Z",
+      "verification_end": "2026-04-15T11:35:00Z",
+      "awaiting_approval_since": "2026-04-15T11:35:05Z",
+      "approval_date": null
+    }
+  },
+  "approvals": {
+    "mode_1_manual_approvals": [
+      {
+        "step": 1,
+        "approved_at": "2026-04-15T11:05:00Z",
+        "approved_by": "user"
+      }
+    ]
+  }
+}
+```
+
+### Field Reference
+
+**Workflow-level fields:**
+- `task_name` — Task identifier (matches directory name)
+- `mode` — 1 (step-by-step approval) or 2 (continuous)
+- `workflow_status` — `initialized`, `in-progress`, `paused`, `completed`
+- `created` — ISO 8601 creation date
+- `started` — ISO 8601 timestamp when first step began (null until execution starts)
+- `completed` — ISO 8601 timestamp when last step completed (null until workflow finishes)
+- `current_step` — Step number currently being worked on
+
+**Step status values:**
+- `pending` — Not started
+- `implementation` — Implementer agent is working
+- `verification` — Verifier agent is testing
+- `awaiting-approval` — Verification passed, waiting for human approval (Mode 1 only)
+- `needs-fix` — Issues found, needs re-implementation
+- `complete` — Verified and approved
+
+**Step-level fields:**
+- `name` — Step name
+- `status` — Current status (see values above)
+- `iteration` — How many times implemented (starts at 1, increments on needs-fix)
+- `implementation_start` — When implementer started
+- `implementation_end` — When implementer finished
+- `verification_start` — When verifier started
+- `verification_end` — When verifier finished
+- `awaiting_approval_since` — When approval wait started (Mode 1 only)
+- `approval_date` — When approved (Mode 1 only)
+
+For detailed explanation of progress tracking and pause/resume mechanics, see [PROGRESS_TRACKING.md](PROGRESS_TRACKING.md).
+
+## 3. step-N-<name>.md — Step Detail File
 
 **Location:** `.workflow/TASK_NAME/steps/step-N-<name>.md`
 
@@ -323,7 +357,7 @@ Tracks all iterations of the step:
 - Iteration 2: 2026-04-09 - Fix error handling → Verification → PASS ✓
 ```
 
-## 3. .workflow-config.json — Task Configuration
+## 4. .workflow-config.json — Task Configuration
 
 **Location:** `.workflow/TASK_NAME/.workflow-config.json`
 
