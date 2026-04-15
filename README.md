@@ -137,8 +137,9 @@ After execution:
 - **[QUICKSTART.md](docs/QUICKSTART.md)** — Step-by-step guide to creating your first workflow
 - **[PROGRESS_TRACKING.md](docs/PROGRESS_TRACKING.md)** — Detailed guide to PLAN.md, progress.json, status values, and pause/resume
 - **[MODE_GUIDE.md](docs/MODE_GUIDE.md)** — Detailed explanation of Mode 1 vs Mode 2, decision matrix
-- **[workflow-format.md](docs/workflow-format.md)** — Reference for PLAN.md and step file formats
+- **[EXECUTION_MODES.md](docs/EXECUTION_MODES.md)** — Subagent Mode vs Manual Mode: choose how execute runs your workflow
 - **[EXECUTE_AGENT_DISPATCH.md](docs/EXECUTE_AGENT_DISPATCH.md)** — CRITICAL: Agent vs Skill dispatch patterns for execute skill
+- **[workflow-format.md](docs/workflow-format.md)** — Reference for PLAN.md and step file formats
 - **[INSTALLATION.md](docs/INSTALLATION.md)** — Detailed installation and machine setup
 - **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — Common issues and recovery procedures
 

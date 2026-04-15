@@ -16,7 +16,9 @@ When you see `implementer` or `verifier` mentioned here:
 
 **You are the orchestrator. You dispatch agents. You do NOT run implementer or verifier yourself.**
 
-**See [EXECUTE_AGENT_DISPATCH.md](../docs/EXECUTE_AGENT_DISPATCH.md) for detailed patterns and common mistakes.**
+**For detailed patterns and common mistakes, see:**
+- **[EXECUTION_MODES.md](../docs/EXECUTION_MODES.md)** — Choose between Subagent Mode and Manual Mode
+- **[EXECUTE_AGENT_DISPATCH.md](../docs/EXECUTE_AGENT_DISPATCH.md)** — Agent vs Skill dispatch patterns
 
 ---
 
