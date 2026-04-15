@@ -1,6 +1,6 @@
 ---
 name: workflow:execute
-description: Orchestrate workflow execution - read state, show plan, ask about mode and execution method
+description: Orchestrate workflow execution - read state, confirm subagent execution, ask about workflow mode
 ---
 
 # Workflow Execute
@@ -25,6 +25,19 @@ Execute manages workflow state and coordinates step execution in strict order.
    - If mode is null → will ask user in Step 3
    - If mode is set → continue to Step 1.5
 
+**Output to user:**
+```
+Current state:
+- Workflow: {TASK_NAME}
+- Mode: {Step Manual Approve or Final Approve} (or 'Not set' if null)
+- Current step: {N} ({STEP_NAME})
+- Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
+- Workflow status: {initialized/in-progress/paused/completed}
+- Iteration: {current iteration count}
+```
+
+---
+
 ### Step 1.5: Confirm Subagent Execution (First Run Only)
 
 **If workflow_status is "initialized" (first execution):**
@@ -46,16 +59,8 @@ AskUserQuestion:
 **If user stops:**
 - Exit workflow, user can run `/workflow:execute` again later if they change their mind
 
-**Output to user:**
-```
-Current state:
-- Workflow: {TASK_NAME}
-- Mode: {Step Manual Approve or Final Approve} (or 'Not set' if null)
-- Current step: {N} ({STEP_NAME})
-- Current status: {pending/implementation/verification/awaiting-approval/needs-fix/complete}
-- Workflow status: {initialized/in-progress/paused/completed}
-- Iteration: {current iteration count}
-```
+**If workflow_status is NOT "initialized" (resuming):**
+- Skip this step, continue to Step 2
 
 ---
 
