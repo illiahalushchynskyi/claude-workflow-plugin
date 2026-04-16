@@ -5,10 +5,36 @@
   },
   "plugins": [
     {
+      "id": "workflow",
       "name": "workflow",
-      "source": "./",
       "version": "1.2.0",
-      "description": "Workflow system for AI-driven development"
+      "description": "Workflow system for AI-driven development with dual execution modes (Subagent/Current Session), two approval strategies (Step Manual Approve/Final Approve), and persistent file-based state tracking",
+      "author": "AI Development Team",
+      "license": "MIT",
+      "installPath": "/home/illia/.claude/plugins/workflow",
+      "skillsDir": "skills/",
+      "skills": [
+        {
+          "name": "workflow:bootstrap",
+          "description": "Initialize a new workflow task - creates PLAN.md and initial step files from task description"
+        },
+        {
+          "name": "workflow:implementer",
+          "description": "Execute implementation work for a workflow step - modifies code and updates step tracking files"
+        },
+        {
+          "name": "workflow:verifier",
+          "description": "Test a workflow step and mark complete - runs verification criteria and gates advancement"
+        },
+        {
+          "name": "workflow:execute",
+          "description": "Orchestrate workflow execution - reads state, confirms mode, handles approvals, chooses execution method (Subagent or Current Session)"
+        },
+        {
+          "name": "workflow:finalize",
+          "description": "Create final commit after workflow completion - summarizes all steps and updates status to complete"
+        }
+      ]
     }
   ]
 }
