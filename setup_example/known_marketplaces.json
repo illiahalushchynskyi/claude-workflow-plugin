@@ -1,0 +1,18 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "/home/illia/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-04-16T13:12:33.505Z"
+  },
+  "workflow-local": {
+    "source": {
+      "source": "directory",
+      "path": "/home/illia/.claude/plugins/workflow"
+    },
+    "installLocation": "/home/illia/.claude/plugins/workflow",
+    "lastUpdated": "2026-04-16T13:07:06.715Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "plugins": {
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/home/illia/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7",
+        "version": "5.0.7",
+        "installedAt": "2026-04-04T08:28:12.562Z",
+        "lastUpdated": "2026-04-04T08:28:12.562Z",
+        "gitCommitSha": "b7a8f76985f1e93e75dd2f2a3b424dc731bd9d37"
+      }
+    ],
+    "workflow@workflow-local": [
+      {
+        "scope": "user",
+        "installPath": "/home/illia/.claude/plugins/workflow",
+        "version": "1.2.0",
+        "installedAt": "2026-04-16T12:00:00.000Z",
+        "lastUpdated": "2026-04-16T12:00:00.000Z"
+      }
+    ]
+  }
+}
