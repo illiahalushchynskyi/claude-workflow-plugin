@@ -40,15 +40,15 @@ START: /workflow:execute
   │                      NO  → status = "needs-fix", loop back (re-enter Step 5)
   │
   ├─→ Step 5: Execute if Work Needed
-  │    └─→ status IN ["pending", "needs-fix", "verification"]? YES → Dispatch agent
-  │    │                                                        NO  → status already complete
-  │    └─→ In Mode 1 (pending/needs-fix): AUTO-RETRY LOOP
+  │    └─→ status IN [pending, needs-fix, verification]? YES → Execute
+  │    │                                                 NO  → Skip (complete or awaiting-approval)
+  │    └─→ If status IN [pending, needs-fix]: AUTO-RETRY LOOP (both Mode 1 & 2)
   │        ├─→ Implement → Verify
-  │        ├─→ If PASS: status = "awaiting-approval" → Break loop
-  │        └─→ If FAIL: status = "needs-fix" → Re-implement → Verify (repeat until PASS, max 5 iterations)
-  │    └─→ In Mode 2 or verification status: SINGLE-SHOT
-  │        ├─→ If was implementing: status = "verification"
-  │        └─→ If was verifying: status = "complete" or "needs-fix"
+  │        ├─→ If PASS: Mode 1 → awaiting-approval; Mode 2 → complete
+  │        └─→ If FAIL: Re-implement → Verify (repeat until PASS, no limit)
+  │    └─→ If status == verification: Verify only (implement already done)
+  │        ├─→ If PASS: Mode 1 → awaiting-approval; Mode 2 → complete
+  │        └─→ If FAIL: Re-implement → Verify (enter auto-retry loop)
   │
   └─→ LOOP: Back to Step 1 until all steps "complete"
        └─→ All complete? YES → Finalize → END
@@ -161,11 +161,13 @@ If Step Manual Approve (mode=1):
   → Implement → Verify
   → If verification FAILS: Re-implement → Verify again (automatic, no user action)
   → If verification PASSES: You approve → Next step
-  → This continues until verification passes
+  → Repeats until verification passes, then pauses for approval
 
 If Final Approve (mode=2):
-  → Implement → Verify → Auto-continue (no approval)
-  → All steps run automatically, approval only at the end
+  → Implement → Verify
+  → If verification FAILS: Re-implement → Verify again (automatic, no pauses, no approval)
+  → If verification PASSES: Auto-continue to next step
+  → All steps run automatically, approval only at the very end for entire workflow
 ```
 
 **POST-CONDITION:** User understands what will happen next
@@ -195,8 +197,8 @@ AskUserQuestion:
 
 | Mode | Behavior | When You're Asked to Approve |
 |------|----------|-----|
-| **Step Manual Approve (mode=1)** | After each step: implement → verify → (if fail: re-implement → verify automatically until pass) → PAUSE for your approval → next step | After each step passes verification, once per step |
-| **Final Approve (mode=2)** | All steps: implement → verify → auto-continue (no pauses) → implement next → verify → ... | Once at the very end after all complete |
+| **Step Manual Approve (mode=1)** | Each step: implement → verify → (if fail: re-implement → verify auto-retry until pass) → PAUSE for your approval → next step | After each step passes verification (once per step) |
+| **Final Approve (mode=2)** | All steps: implement → verify → (if fail: auto-retry until pass) → auto-continue (no pauses) → next step → ... | Once at the very end after all steps complete |
 
 **ACTIONS AFTER USER CHOOSES:**
 1. Update progress.json: `mode` field = 1 or 2 (user's choice)
@@ -268,30 +270,30 @@ AskUserQuestion:
 current_step.status IN ["pending", "needs-fix", "verification"]
 ```
 
-If status == "complete": SKIP this step, loop back to Step 1
+If status == "complete" or status == "awaiting-approval": SKIP this step, loop back to Step 1
 
 | Status | Action |
 |--------|--------|
-| `pending` | Execute (implement) |
-| `needs-fix` | Execute (re-implement) |
-| `verification` | Execute (verify) |
+| `pending` | Execute auto-retry loop (implement → verify until pass) |
+| `needs-fix` | Execute auto-retry loop (re-implement → verify until pass) |
+| `verification` | Execute verify only (implement already done) |
 | `complete` | SKIP (already done) |
+| `awaiting-approval` | SKIP (waiting for user approval in Step 4) |
 
 **PRE-CONDITION:** 
 - progress.json loaded and mode set
 - current step identified
-- status is NOT "complete"
+- status is NOT "complete" and NOT "awaiting-approval"
 
 **PROCEDURE:**
 
-#### Mode 1 Auto-Retry Loop (Step Manual Approve)
+#### Auto-Retry Loop (Both Mode 1 and Mode 2)
 
-**IF** mode == 1 AND status IN [pending, needs-fix]:
+**IF** status IN [pending, needs-fix]:
 ```
-MAX_ITERATIONS = 5
 iteration_count = 0
 
-WHILE iteration_count < MAX_ITERATIONS:
+WHILE status != "awaiting-approval" AND status != "complete":
   1. Dispatch implementer
      → Set status = "verification"
   
@@ -300,30 +302,31 @@ WHILE iteration_count < MAX_ITERATIONS:
   
   3. Check verification results:
      IF all criteria PASSED:
-       → Set status = "awaiting-approval"
-       → Set awaiting_approval_since = now (ISO8601)
-       → Increment iteration counter (for tracking)
-       → Break loop → Continue to post-condition
+       IF mode == 1:
+         → Set status = "awaiting-approval"
+         → Set awaiting_approval_since = now (ISO8601)
+         → Break loop
+       ELSE (mode == 2):
+         → Set status = "complete"
+         → Break loop
      ELSE (any criterion FAILED):
        → Set status = "needs-fix"
-       → Increment iteration counter
+       → Increment iteration counter (for tracking)
        → Read updated step-{N}.md with failures
        → Continue loop (re-run implementer)
 
 END WHILE
-
-IF iteration_count >= MAX_ITERATIONS AND status != "awaiting-approval":
-  → Status remains "needs-fix"
-  → Report to user: "Maximum iterations (5) reached. Step needs manual review."
-  → Break loop
 ```
 
-**This means:** In Mode 1, implement → verify → (if fail) re-implement → verify → ... until success, all without asking user until step passes verification.
+**This means:** 
+- Mode 1: implement → verify → (if fail) re-implement → verify → ... until success → awaiting-approval (pause for user)
+- Mode 2: implement → verify → (if fail) re-implement → verify → ... until success → complete (auto-continue to next step)
+- No iteration limits — continues until verification passes
 
-#### Single-Shot Execution (Mode 2 or verification status)
+**Agent Dispatch Examples:**
 
-**ELSE** (mode == 2 OR status == "verification"):
 ```python
+# For implementer
 Agent(
   description: f"Implement {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
@@ -347,10 +350,8 @@ Completion signal: step-{N}.md Implementation section is filled with:
 - Git commit created
 """
 )
-```
 
-**IF verifying (status = verification):**
-```python
+# For verifier
 Agent(
   description: f"Verify {TASK_NAME} step {N}: {STEP_NAME}",
   subagent_type: "general-purpose",
@@ -375,27 +376,17 @@ Completion signal: step-{N}.md Verification section is filled with:
 )
 ```
 
-**AFTER AGENT RETURNS (Single-Shot):**
+**AFTER LOOP COMPLETES:**
 
-1. **Check Completion Signal:**
-   - If implementing: Read step-{N}.md → Implementation section must be filled
-   - If verifying: Read step-{N}.md → Verification section must be filled with criterion results
+1. **Status is now:**
+   - Mode 1: `awaiting-approval` (paused, waiting for user approval)
+   - Mode 2: `complete` (auto-continued to next step)
 
-2. **Update progress.json Step Status:**
-   ```
-   If was implementing (old status pending/needs-fix):
-     → new status = "verification"
-   
-   If was verifying (old status verification):
-     → If all criteria PASSED: new status = "complete"
-     → If any criterion FAILED: new status = "needs-fix"
-   ```
+2. **If status == "verification" (never entered loop):**
+   - Dispatch verifier only (step already implemented)
+   - After verify: check results and set status as above
 
-3. **If Mode 2 (Final Approve) AND all criteria passed:**
-   - Set status = "complete"
-   - Do NOT set awaiting_approval_since (Mode 2 auto-continues)
-
-4. **Loop back to Step 1** to process new status
+3. **Loop back to Step 1** to process new status
    - Step 1: Read updated state
    - Step 1.5: Skip (already in-progress)
    - Step 2: Show what's next based on new status
@@ -442,8 +433,14 @@ Skill(skill: "workflow:finalize")
 - ❌ Skip asking about mode (Step 3) - ASK EVERY TIME
 - ❌ Dispatch implementer/verifier without Step 3 mode selection
 - ❌ Ask approval (Step 4) unless Step Manual Approve mode AND status == "awaiting-approval"
-- ❌ In Mode 1 with status IN [pending, needs-fix]: ask user to confirm between implement and verify cycles - let auto-retry loop run until verification passes
-- ❌ Break Mode 1 auto-retry loop before verification passes (max 5 iterations is the only limit)
+- ❌ In Mode 1 or Mode 2 with status IN [pending, needs-fix]: ask user between implement/verify cycles - let auto-retry loop run until verification passes
+- ❌ Break auto-retry loop before verification passes (no iteration limits - continues until success or max retries handled by external timeout)
+
+**⚠️ WARNING:** 
+- Auto-retry loops have no iteration limit. If verification criteria are impossible to satisfy, the loop will continue indefinitely.
+- Verifier must be robust: criteria should be testable and achievable by implementer.
+- For unsatisfiable criteria: verifier will keep failing, implementer will keep re-trying, loop continues forever.
+- Recommendation: If a step is stuck in infinite retry after several executions, review verification criteria and either fix them or reconsider the step goal.
 
 ---
 
@@ -577,7 +574,7 @@ Step 4: Check approval (Mode = 1 AND status = awaiting-approval)
 All steps complete → Finalize
 ```
 
-### Mode 2 (Final Approve) - No Pauses During Steps
+### Mode 2 (Final Approve) - Auto-Retry Without Pauses
 
 ```
 Start: /workflow:execute
@@ -595,19 +592,29 @@ Step 3: Ask workflow mode
   → User: Final Approve (mode = 2)
 
 Step 4: Check approval
-  → Step 1 status = pending (not complete) → Skip
+  → Step 1 status = pending (not awaiting-approval) → Skip
 
-Step 5: Execute with subagent (Single-Shot, Mode 2)
+Step 5: Execute with subagent (Mode 2 Auto-Retry Loop)
+  → MAX_ITERATIONS = unlimited
+  
+  **Iteration 1:**
   → Dispatch Agent(implementer step 1)
   → status = verification
   → Dispatch Agent(verifier step 1)
-  → All criteria PASS
-  → Set status = complete
-  → Loop back to Step 1 for Step 2
+  → Result: 1 criterion FAILED
+  → status = needs-fix, iteration = 1, continue loop (NO pause, NO user interaction)
+  
+  **Iteration 2:**
+  → Dispatch Agent(implementer step 1) [re-implement based on failures]
+  → status = verification
+  → Dispatch Agent(verifier step 1)
+  → Result: All criteria PASS
+  → Set status = complete (no awaiting-approval)
+  → Break loop, continue to Step 1 for Step 2
 
-[Repeat without pauses for steps 2 & 3...]
+[Repeat without pauses or user input for steps 2 & 3...]
 
-All steps complete → Finalize with single user approval
+All steps complete → Finalize with single user approval at the very end
 ```
 
 ---
